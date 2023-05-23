@@ -1,0 +1,26 @@
+[package]
+name = "cli"
+version.workspace = true
+edition = "2021"
+publish = false
+
+[dependencies]
+anyhow = "1.0.71"
+clap = { version = "4.2.7", features = ["derive"] }
+derive_more = { version = "0.99.17", default-features = false, features = ["display", "error", "from"] }
+figment = { version = "0.10.8", default-features = false, features = ["env", "toml"] }
+hex = "0.4.3"
+home = "0.5.5"
+indicatif = "0.17.3"
+itertools = "0.10.5"
+open = "4.1.0"
+rand = "0.8.5"
+reqwest = { version = "0.11.17", default-features = false, features = ["blocking", "json", "multipart", "rustls-tls-webpki-roots"] }
+serde = { version = "1.0.163", features = ["derive"] }
+tempfile = "3.5.0"
+toml = { version = "0.7.3", default-features = false, features = ["display"] }
+walkdir = "2.3.3"
+which = "4.4.0"
+zip = { version = "0.6.6", default-features = false }
+
+common = { path = "../common", default-features = false }

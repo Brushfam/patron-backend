@@ -1,0 +1,19 @@
+[package]
+name = "event_client"
+version.workspace = true
+edition = "2021"
+publish = false
+
+[dependencies]
+anyhow = "1.0.71"
+clap = { version = "4.2.7", features = ["derive"] }
+derive_more = "0.99.17"
+futures-util = "0.3.28"
+hex = "0.4.3"
+itertools = "0.10.5"
+serde_json = "1.0.96"
+tokio = { version = "1.28.1", features = ["rt-multi-thread", "macros"] }
+unix-ts = "0.4.1"
+
+common = { path = "../common", features = ["logging", "rpc"] }
+db = { path = "../db" }

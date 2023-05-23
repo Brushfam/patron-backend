@@ -1,0 +1,28 @@
+[package]
+name = "db"
+version.workspace = true
+edition = "2021"
+publish = false
+
+[features]
+testing = ["sea-orm/sqlx-sqlite"]
+
+[dependencies]
+async-trait = "0.1.68"
+rand = "0.8.5"
+time = "0.3.21"
+serde = { version = "1.0.162", features = ["derive"] }
+
+[dependencies.sea-orm]
+version = "0.11.3"
+default-features = false
+features = [
+    "macros",
+    "sqlx-postgres",
+    "runtime-tokio-native-tls",
+    "with-time"
+]
+
+[dev-dependencies]
+sea-orm = { version = "0.11.3", features = ["macros", "sqlx-sqlite"] }
+tokio = { version = "1.28.1", features = ["macros"] }
