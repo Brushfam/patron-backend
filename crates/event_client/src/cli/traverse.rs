@@ -1,11 +1,7 @@
 use std::str::FromStr;
 
 use common::rpc::{
-    subxt::{
-        self,
-        rpc::types::{BlockNumber, NumberOrHex},
-        Config, Error, OnlineClient, PolkadotConfig,
-    },
+    subxt::{self, Config, Error, OnlineClient, PolkadotConfig},
     ContractEvent, ContractEventData, InvalidSchema, Schema,
 };
 use db::{
@@ -13,8 +9,10 @@ use db::{
     TransactionErrorExt, TransactionTrait,
 };
 use derive_more::{Display, Error, From};
-use futures_util::{pin_mut, stream::try_unfold, TryStreamExt};
+use futures_util::{pin_mut, TryStreamExt};
 use itertools::Itertools;
+
+use crate::utils::block_mapping_stream;
 
 #[derive(Debug, Display, Error, From)]
 pub enum TraverseError {
@@ -37,31 +35,11 @@ pub async fn traverse(database: DatabaseConnection, name: String) -> Result<(), 
 
     let schema = Schema::from_str(&node.schema)?;
 
-    let mut current_block = 0u64;
-    let confirmed_block = node.confirmed_block as u64;
+    let stream = block_mapping_stream(0..=node.confirmed_block as u64, &api);
 
-    let block_mapping_stream = try_unfold(
-        (&mut current_block, api.rpc()),
-        |(block_number, rpc)| async move {
-            let mut block_hash = None;
+    pin_mut!(stream);
 
-            while block_hash.is_none() && *block_number <= confirmed_block {
-                println!("block: {}", &block_number);
-
-                block_hash = rpc
-                    .block_hash(Some(BlockNumber::from(NumberOrHex::from(*block_number))))
-                    .await?;
-
-                *block_number += 1;
-            }
-
-            Result::<_, TraverseError>::Ok(block_hash.map(|val| (val, (block_number, rpc))))
-        },
-    );
-
-    pin_mut!(block_mapping_stream);
-
-    while let Some(block_hash) = block_mapping_stream.try_next().await? {
+    while let Some((_, block_hash)) = stream.try_next().await? {
         if let Ok(block_data) = parse_block(&api, &schema, block_hash).await {
             database
                 .transaction::<_, _, TraverseError>(|txn| {

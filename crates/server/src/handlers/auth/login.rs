@@ -7,8 +7,9 @@ use axum::{
 };
 use axum_derive_error::ErrorResponse;
 use db::{
-    cli_token, public_key, token, ActiveValue, ColumnTrait, DatabaseConnection, DbErr, EntityTrait,
-    QueryFilter, QuerySelect, TransactionErrorExt, TransactionTrait,
+    cli_token, public_key, sea_query::OnConflict, token, ActiveValue, ColumnTrait,
+    DatabaseConnection, DbErr, EntityTrait, QueryFilter, QuerySelect, TransactionErrorExt,
+    TransactionTrait,
 };
 use derive_more::{Display, Error, From};
 use serde::{Deserialize, Serialize};
@@ -82,6 +83,11 @@ pub(super) async fn login(
                         token: ActiveValue::Set(token),
                         authentication_token_id: ActiveValue::Set(model.id),
                     })
+                    .on_conflict(
+                        OnConflict::column(cli_token::Column::Token)
+                            .do_nothing()
+                            .to_owned(),
+                    )
                     .exec_without_returning(txn)
                     .await?;
 
@@ -315,5 +321,50 @@ mod tests {
                     .ok_or(String::from("invalid length"))
             })
         });
+    }
+
+    #[tokio::test]
+    async fn cli_token_repetition() {
+        let db = create_database().await;
+
+        create_test_account(&db).await;
+
+        let cli_token = Alphanumeric.sample_string(&mut thread_rng(), cli_token::TOKEN_LENGTH);
+
+        let mut service = crate::app_router(Arc::new(db), Arc::new(Config::new().unwrap()));
+
+        let login_response = service
+            .call(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!("/auth/login?cli_token={cli_token}"))
+                    .header("Content-Type", "application/json")
+                    .body(Body::from_json(json!({
+                        "account": ACCOUNT_ID,
+                        "signature": "0x6aa1134d5082aae91dc710cf70d79d2abf6c261cc58eeb13d25ef4dfc8eeed54de76e49f186cde3efd41f6008598ab8d895c78b4354f26e868ead1d8e6410d8a",
+                    })))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(login_response.status(), StatusCode::OK);
+
+        let login_response = service
+            .call(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!("/auth/login?cli_token={cli_token}"))
+                    .header("Content-Type", "application/json")
+                    .body(Body::from_json(json!({
+                        "account": ACCOUNT_ID,
+                        "signature": "0x6aa1134d5082aae91dc710cf70d79d2abf6c261cc58eeb13d25ef4dfc8eeed54de76e49f186cde3efd41f6008598ab8d895c78b4354f26e868ead1d8e6410d8a",
+                    })))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(login_response.status(), StatusCode::OK);
     }
 }

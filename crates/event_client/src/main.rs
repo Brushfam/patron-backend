@@ -3,12 +3,14 @@ pub(crate) mod utils;
 
 use clap::Parser;
 use cli::{Cli, Command};
-use common::config::Config;
+use common::{config::Config, logging};
 use db::Database;
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     let config = Config::new()?;
+
+    logging::init(&config);
 
     let database = Database::connect(&config.database.url).await?;
 

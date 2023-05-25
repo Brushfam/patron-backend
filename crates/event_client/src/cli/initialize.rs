@@ -25,6 +25,11 @@ pub enum InitializeError {
     InvalidPaymentAddress,
 }
 
+/// Initialize an RPC node from the provided data.
+///
+/// This method does not traverse chain for new events,
+/// but does initialize a database from existing contracts
+/// and code uploads.
 pub async fn initialize(
     database: DatabaseConnection,
     name: String,

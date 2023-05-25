@@ -74,6 +74,31 @@ CONFIG_STORAGE="{\
 "
 ```
 
+## Installation
+
+For installation of different server components it's recommended to utilize our Nix environment, which
+allows you to build Docker images and binaries with ease.
+
+Building all components:
+
+```sh
+nix build .#
+```
+
+You can also use a standard Rust toolchain for this task:
+
+```sh
+cargo build --release
+```
+
+To build the Docker image from scratch, you can utilize the next command:
+
+```sh
+nix build .#ink-builder
+```
+
+Pre-built Docker images are available to download from GitHub releases.
+
 ## API server
 
 API server is required to handle client requests and generally has to be available to a user network.
@@ -85,10 +110,6 @@ To start an API server, simply run its binary with the configured `Config.toml`:
 ```
 
 Be sure to install a separate proxy server to handle TLS termination and resource limiting.
-
-### Docker image
-
-
 
 ## Smart contract builder
 
@@ -134,6 +155,8 @@ Watching for new chain events is available with the `watch` command:
 ```sh
 ./event_client watch my_node
 ```
+
+Event watcher will also attempt to traverse any missed blocks automatically.
 
 For more information about available commands use the `--help` flag.
 

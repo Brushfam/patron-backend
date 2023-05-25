@@ -15,6 +15,7 @@ pub enum UpdateContractError {
     InvalidPaymentAddress,
 }
 
+/// Update payment contract information.
 pub async fn update_contract(
     database: DatabaseConnection,
     name: String,
