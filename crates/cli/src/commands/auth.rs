@@ -39,12 +39,12 @@ pub(crate) fn auth(server_path: Option<String>, web_path: Option<String>) -> Res
 
     let exchange_url = format!("{web_domain}/login?cli_token={cli_token}");
 
-    let _ = open::that(&exchange_url);
-
     let pg = ProgressBar::new_spinner();
 
     pg.enable_steady_tick(Duration::from_millis(150));
     pg.println(format!("Opening {exchange_url}"));
+
+    let _ = open::that_in_background(&exchange_url);
 
     loop {
         pg.set_message("Awaiting for authentication token...");

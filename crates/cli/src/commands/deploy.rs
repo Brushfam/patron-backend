@@ -252,16 +252,22 @@ pub(crate) fn deploy(
     upload_command
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
-        .args(["contract", "upload", "--execute", "--skip-confirm"])
+        .args([
+            "contract",
+            "upload",
+            "--execute",
+            "--skip-confirm",
+            "--skip-dry-run",
+        ])
         .arg(wasm_file.path())
         .args(&cargo_contract_flags);
 
-    if let Some(url) = url {
-        upload_command.args(["--url", &url]);
+    if let Some(url) = url.as_deref() {
+        upload_command.args(["--url", url]);
     }
 
-    if let Some(suri) = suri {
-        upload_command.args(["--suri", &suri]);
+    if let Some(suri) = suri.as_deref() {
+        upload_command.args(["--suri", suri]);
     }
 
     upload_command.spawn()?.wait()?;
@@ -277,6 +283,14 @@ pub(crate) fn deploy(
         .arg(metadata_file.path())
         .args(["--constructor", &constructor])
         .args(cargo_contract_flags);
+
+    if let Some(url) = url.as_deref() {
+        instantiate_command.args(["--url", url]);
+    }
+
+    if let Some(suri) = suri.as_deref() {
+        instantiate_command.args(["--suri", suri]);
+    }
 
     if let Some(args) = args {
         instantiate_command.args(["--args", &args]);
