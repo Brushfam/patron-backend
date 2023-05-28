@@ -25,6 +25,16 @@ Custom server URLs are later propagated to other commands (such as deploy) autom
 The build process itself is done on a remote server, but the deployment process is done locally to keep your private keys
 safe and to facilitate possible air-gapped deployments.
 
+First of all, you need to create a `Deploy.toml` file at the root of your contract source code.
+This file describes the Rust toolchain and `cargo-contract` versions that will be used during the build:
+
+```toml
+rustc_version = "1.69.0"
+cargo_contract_version = "3.0.1"
+```
+
+You can check this file into your VCS to share the same configuration with your development team.
+
 To start the deploy process for locally running development node simply pass the constructor name and secret URI for the private key:
 
 ```sh

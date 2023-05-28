@@ -1,5 +1,5 @@
 [package]
-name = "cli"
+name = "patron"
 version.workspace = true
 edition = "2021"
 publish = false
