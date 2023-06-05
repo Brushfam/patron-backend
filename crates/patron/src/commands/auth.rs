@@ -9,8 +9,11 @@ use rand::{
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 
-use crate::config::{
-    default_server_path, default_web_path, AuthenticationConfig, AuthenticationConfigError,
+use crate::{
+    commands::Auth,
+    config::{
+        default_server_path, default_web_path, AuthenticationConfig, AuthenticationConfigError,
+    },
 };
 
 const EXCHANGE_TOKEN_LENGTH: usize = 64;
@@ -31,7 +34,12 @@ pub(crate) enum AuthError {
     Http(reqwest::Error),
 }
 
-pub(crate) fn auth(server_path: Option<String>, web_path: Option<String>) -> Result<(), AuthError> {
+pub(crate) fn auth(
+    Auth {
+        server_path,
+        web_path,
+    }: Auth,
+) -> Result<(), AuthError> {
     let server_domain = server_path.unwrap_or(default_server_path());
     let web_domain = web_path.unwrap_or(default_web_path());
 

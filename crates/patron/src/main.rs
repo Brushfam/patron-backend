@@ -9,25 +9,8 @@ fn main() -> Result<(), anyhow::Error> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Auth {
-            server_path: server_domain,
-            web_path: web_domain,
-        } => commands::auth(server_domain, web_domain)?,
-        Commands::Deploy {
-            constructor,
-            force_new_build_sessions,
-            url,
-            suri,
-            args,
-            cargo_contract_flags: var_arg,
-        } => commands::deploy(
-            force_new_build_sessions,
-            constructor,
-            url,
-            suri,
-            args,
-            var_arg,
-        )?,
+        Commands::Auth(args) => commands::auth(args)?,
+        Commands::Deploy(args) => commands::deploy(args)?,
     }
 
     Ok(())

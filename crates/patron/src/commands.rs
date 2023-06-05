@@ -6,7 +6,7 @@ pub(crate) use deploy::deploy;
 
 use std::path::PathBuf;
 
-use clap::{Parser, Subcommand};
+use clap::{Args, Parser, Subcommand};
 
 #[derive(Parser)]
 #[command(about)]
@@ -22,40 +22,54 @@ pub(crate) struct Cli {
 #[derive(Subcommand)]
 pub(crate) enum Commands {
     /// Authenticate using the browser flow.
-    Auth {
-        /// Custom server path.
-        #[arg(short, long)]
-        server_path: Option<String>,
-
-        /// Custom web path.
-        #[arg(short, long)]
-        web_path: Option<String>,
-    },
+    Auth(Auth),
 
     /// Start the deployment process.
-    #[clap(trailing_var_arg = true)]
-    Deploy {
-        /// Contract constructor name.
-        constructor: String,
+    Deploy(Deploy),
+}
 
-        /// Always start new build sessions, even if the source code was verified previously.
-        #[arg(short, long)]
-        force_new_build_sessions: bool,
+#[derive(Args)]
+pub struct Auth {
+    /// Custom server path.
+    #[arg(short, long)]
+    server_path: Option<String>,
 
-        /// WebSocket URL of an RPC node.
-        #[arg(short, long)]
-        url: Option<String>,
+    /// Custom web path.
+    #[arg(short, long)]
+    web_path: Option<String>,
+}
 
-        /// Secret URI for signing requests.
-        #[arg(short, long)]
-        suri: Option<String>,
+#[derive(Args)]
+#[clap(trailing_var_arg = true)]
+pub struct Deploy {
+    /// Contract constructor name.
+    constructor: String,
 
-        /// Space-separated values passed to constructor.
-        #[arg(short, long)]
-        args: Option<String>,
+    /// Always start new build sessions, even if the source code was verified previously.
+    #[arg(short, long)]
+    force_new_build_sessions: bool,
 
-        /// Additional options passed to cargo-contract.
-        #[clap(allow_hyphen_values = true)]
-        cargo_contract_flags: Vec<String>,
-    },
+    /// WebSocket URL of an RPC node.
+    #[arg(short, long)]
+    url: Option<String>,
+
+    /// Secret URI for signing requests.
+    #[arg(short, long)]
+    suri: Option<String>,
+
+    /// Space-separated values passed to constructor.
+    #[arg(short, long)]
+    args: Option<String>,
+
+    /// Gas value used to instantiate the contract.
+    #[arg(short, long)]
+    gas: Option<u64>,
+
+    /// Maximum proof size for contract instantiation.
+    #[arg(short, long)]
+    proof_size: Option<u64>,
+
+    /// Additional options passed to cargo-contract.
+    #[clap(allow_hyphen_values = true)]
+    cargo_contract_flags: Vec<String>,
 }

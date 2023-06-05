@@ -13,10 +13,13 @@ use tempfile::NamedTempFile;
 
 use crate::{
     archiver::{build_zip_archive, ArchiverError},
+    commands::Deploy,
     config::{AuthenticationConfig, AuthenticationConfigError, ProjectConfig},
 };
 
 const CARGO_CONTRACT_REPO: &str = "https://github.com/paritytech/cargo-contract";
+
+const DEFAULT_WEIGHT_VAL: u64 = 10_000_000_000;
 
 #[derive(Deserialize)]
 struct ExistingCodeHashResponse {
@@ -73,12 +76,16 @@ pub(crate) enum DeployError {
 }
 
 pub(crate) fn deploy(
-    force_new_build_sessions: bool,
-    constructor: String,
-    url: Option<String>,
-    suri: Option<String>,
-    args: Option<String>,
-    cargo_contract_flags: Vec<String>,
+    Deploy {
+        constructor,
+        force_new_build_sessions,
+        url,
+        suri,
+        args,
+        gas,
+        proof_size,
+        cargo_contract_flags,
+    }: Deploy,
 ) -> Result<(), DeployError> {
     let auth_config = AuthenticationConfig::new()?;
     let project_config = ProjectConfig::new()?;
@@ -279,7 +286,17 @@ pub(crate) fn deploy(
     instantiate_command
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
-        .args(["contract", "instantiate", "--execute", "--skip-confirm"])
+        .args([
+            "contract",
+            "instantiate",
+            "--execute",
+            "--skip-confirm",
+            "--skip-dry-run",
+            "--gas",
+            &gas.unwrap_or(DEFAULT_WEIGHT_VAL).to_string(),
+            "--proof-size",
+            &proof_size.unwrap_or(DEFAULT_WEIGHT_VAL).to_string(),
+        ])
         .arg(metadata_file.path())
         .args(["--constructor", &constructor])
         .args(cargo_contract_flags);
