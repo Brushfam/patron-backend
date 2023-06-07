@@ -70,7 +70,8 @@ CONFIG_STORAGE="{\
     access_key_id=...,\
     secret_access_key=...,\
     region=...,\
-    endpoint_url=...}\
+    endpoint_url=...,\
+    source_code_bucket=...}\
 "
 ```
 
