@@ -1,0 +1,18 @@
+name: "Build workspace"
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  default:
+    name: Default package
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      - name: Install Nix
+        uses: cachix/install-nix-action@v21
+      - name: Build the default package
+        run: nix build .# -L
