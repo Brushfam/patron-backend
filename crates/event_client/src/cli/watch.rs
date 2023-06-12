@@ -19,21 +19,38 @@ use tracing::{debug, info};
 
 use crate::utils::block_mapping_stream;
 
+/// Errors that may occur during the watch process.
 #[derive(Debug, Display, Error, From)]
 pub enum WatchError {
+    /// Database-related error.
     DatabaseError(DbErr),
+
+    /// Substrate RPC-related error.
     RpcError(subxt::Error),
+
+    /// JSON serialization error.
     JsonError(serde_json::Error),
+
+    /// User provided invalid schema name.
     Schema(InvalidSchema),
 
+    /// The provided node name is incorrect.
     #[display(fmt = "node not found")]
     NodeNotFound,
 }
 
-/// Watch an RPC node for new events.
+/// Watch an RPC node for new smart contract-related events.
 ///
-/// This method will attempt to fix any gaps that occured between
-/// watch process activations.
+/// # Details
+///
+/// [`watch`] function will first identify the latest block available
+/// and check if any catch-up attempt is necessary at all.
+///
+/// If catch-up process is required, [`watch`] function will stream
+/// blocks starting from the confirmed block and up to the latest block.
+///
+/// As soon as all missed blocks are processed, [`watch`] will start listening
+/// and processing only new blocks from now on.
 pub async fn watch(database: DatabaseConnection, name: String) -> Result<(), WatchError> {
     let mut node = node::Entity::find()
         .filter(node::Column::Name.eq(&name))

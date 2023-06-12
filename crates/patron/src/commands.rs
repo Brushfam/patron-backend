@@ -1,4 +1,7 @@
+/// `auth` subcommand.
 mod auth;
+
+/// `deploy` subcommand.
 mod deploy;
 
 pub(crate) use auth::auth;
@@ -8,6 +11,7 @@ use std::path::PathBuf;
 
 use clap::{Args, Parser, Subcommand};
 
+/// CLI configuration.
 #[derive(Parser)]
 #[command(about)]
 pub(crate) struct Cli {
@@ -15,10 +19,12 @@ pub(crate) struct Cli {
     #[arg(short, long, default_value = "Deploy.toml")]
     pub config_file: Option<PathBuf>,
 
+    /// Selected subcommand.
     #[command(subcommand)]
     pub command: Commands,
 }
 
+/// Supported subcommands.
 #[derive(Subcommand)]
 pub(crate) enum Commands {
     /// Authenticate using the browser flow.
@@ -28,6 +34,7 @@ pub(crate) enum Commands {
     Deploy(Deploy),
 }
 
+/// `auth` subcommand configuration.
 #[derive(Args)]
 pub struct Auth {
     /// Custom server path.
@@ -39,6 +46,7 @@ pub struct Auth {
     web_path: Option<String>,
 }
 
+/// `deploy` subcommand configuration.
 #[derive(Args)]
 #[clap(trailing_var_arg = true)]
 pub struct Deploy {

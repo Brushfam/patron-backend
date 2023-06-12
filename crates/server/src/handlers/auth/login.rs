@@ -18,39 +18,61 @@ use sp_core::{
     Pair as _,
 };
 
+/// Errors that may occur during the authentication process.
 #[derive(ErrorResponse, Display, From, Error)]
 pub(super) enum UserAuthenticationError {
+    /// Database-related error.
     DatabaseError(DbErr),
 
+    /// An invalid signature was submitted by user.
     #[status(StatusCode::UNPROCESSABLE_ENTITY)]
     #[display(fmt = "invalid signature")]
     InvalidSignature,
 
+    /// Provided key doesn't have any related account.
     // OK is used here to allow web app to interact more simply.
     #[status(StatusCode::OK)]
     #[display(fmt = "no related account was found")]
     NoRelatedAccounts,
 }
 
+/// Query string deserialization struct for an optional CLI token.
 #[derive(Deserialize)]
 pub(super) struct UserAuthenticationQuery {
+    /// User-generated CLI token.
     #[serde(default)]
     cli_token: Option<String>,
 }
 
+/// JSON request body.
 #[derive(Deserialize)]
 pub(super) struct UserAuthenticationRequest {
     account: Public,
     signature: Signature,
 }
 
+/// JSON response body.
 #[derive(Serialize)]
 #[serde(untagged)]
 pub(super) enum UserAuthenticationResponse {
-    Web { token: String },
+    /// Web UI authentication flow.
+    Web {
+        /// Authentication token.
+        token: String,
+    },
+
+    /// CLI authentication flow.
+    ///
+    /// Authentication token is not provided here,
+    /// as the CLI has to request it in a separate
+    /// query to the `exchange` route.
     Cli,
 }
 
+/// User authentication handler.
+///
+/// This handler will accept a verified key
+/// and return an authentication token for the relevant user.
 pub(super) async fn login(
     State(db): State<Arc<DatabaseConnection>>,
     Query(query): Query<UserAuthenticationQuery>,
@@ -157,7 +179,7 @@ mod tests {
 
         create_test_account(&db).await;
 
-        let response = crate::app_router(Arc::new(db), Arc::new(Config::new().unwrap()))
+        let response = crate::app_router(Arc::new(db), Arc::new(Config::for_tests()))
             .oneshot(
                 Request::builder()
                     .method("POST")
@@ -187,7 +209,7 @@ mod tests {
 
         create_test_account(&db).await;
 
-        let response = crate::app_router(Arc::new(db), Arc::new(Config::new().unwrap()))
+        let response = crate::app_router(Arc::new(db), Arc::new(Config::for_tests()))
             .oneshot(
                 Request::builder()
                     .method("POST")
@@ -211,7 +233,7 @@ mod tests {
 
         create_test_account(&db).await;
 
-        let response = crate::app_router(Arc::new(db), Arc::new(Config::new().unwrap()))
+        let response = crate::app_router(Arc::new(db), Arc::new(Config::for_tests()))
             .oneshot(
                 Request::builder()
                     .method("POST")
@@ -235,7 +257,7 @@ mod tests {
 
         create_test_account(&db).await;
 
-        let response = crate::app_router(Arc::new(db), Arc::new(Config::new().unwrap()))
+        let response = crate::app_router(Arc::new(db), Arc::new(Config::for_tests()))
             .oneshot(
                 Request::builder()
                     .method("POST")
@@ -257,7 +279,7 @@ mod tests {
     async fn missing_account() {
         let db = create_database().await;
 
-        let response = crate::app_router(Arc::new(db), Arc::new(Config::new().unwrap()))
+        let response = crate::app_router(Arc::new(db), Arc::new(Config::for_tests()))
             .oneshot(
                 Request::builder()
                     .method("POST")
@@ -283,7 +305,7 @@ mod tests {
 
         let cli_token = Alphanumeric.sample_string(&mut thread_rng(), cli_token::TOKEN_LENGTH);
 
-        let mut service = crate::app_router(Arc::new(db), Arc::new(Config::new().unwrap()));
+        let mut service = crate::app_router(Arc::new(db), Arc::new(Config::for_tests()));
 
         let login_response = service
             .call(
@@ -331,7 +353,7 @@ mod tests {
 
         let cli_token = Alphanumeric.sample_string(&mut thread_rng(), cli_token::TOKEN_LENGTH);
 
-        let mut service = crate::app_router(Arc::new(db), Arc::new(Config::new().unwrap()));
+        let mut service = crate::app_router(Arc::new(db), Arc::new(Config::for_tests()));
 
         let login_response = service
             .call(

@@ -14,6 +14,7 @@ clap = { version = "3.2", default-features = false }
 sea-orm-cli = { version = "0.11.3", default-features = false }
 sea-orm-migration = { version = "0.11.3", features = ["runtime-tokio-native-tls", "sqlx-postgres"] }
 tokio = { version = "1.28.1", features = ["macros", "rt-multi-thread"] }
+tracing = "0.1.37"
 
-common = { path = "../common" }
+common = { path = "../common", features = ["logging"] }
 db = { path = "../db" }

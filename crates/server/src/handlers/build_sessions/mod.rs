@@ -1,10 +1,25 @@
+/// Build session create route.
 mod create;
+
+/// Build session details route.
 mod details;
+
+/// Latest build session info route.
 mod latest;
+
+/// Build session list route.
 mod list;
+
+/// Build session logs route.
 mod logs;
+
+/// Contract JSON metadata route.
 mod metadata;
+
+/// Build session status route.
 mod status;
+
+/// WASM blob route.
 mod wasm;
 
 use std::sync::Arc;
@@ -15,6 +30,8 @@ use db::DatabaseConnection;
 
 use crate::auth;
 
+/// Create a router that provides an API server with
+/// build session management routes.
 pub(crate) fn routes(
     database: Arc<DatabaseConnection>,
     config: Arc<Config>,

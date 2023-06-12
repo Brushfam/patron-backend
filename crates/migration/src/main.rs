@@ -4,8 +4,9 @@ use std::error::Error;
 
 use clap::Parser;
 use cli::Cli;
-use common::config::Config;
+use common::{config::Config, logging};
 use migration::{cli::run_migrate, sea_orm::Database};
+use tracing::info;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -13,7 +14,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let config = Config::new()?;
 
+    logging::init(&config);
+
+    info!("connecting to database");
     let db = Database::connect(&config.database.url).await?;
+    info!("database connection established");
 
     run_migrate(migration::Migrator, &db, cli.command, false).await?;
 

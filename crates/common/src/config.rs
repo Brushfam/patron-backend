@@ -35,6 +35,7 @@ where
     std::str::FromStr::from_str(&s).map_err(serde::de::Error::custom)
 }
 
+/// Logging configuration.
 #[cfg(feature = "logging")]
 #[derive(Deserialize)]
 pub struct Logging {
@@ -52,6 +53,7 @@ impl Default for Logging {
     }
 }
 
+/// Smart contract builder configuration.
 #[derive(Deserialize)]
 pub struct Builder {
     /// Path in which contract builder will store all user artifacts.
@@ -88,6 +90,9 @@ pub struct Builder {
     pub volume_size: String,
 }
 
+// Default values used for builder configuration.
+// These are picked to be as compatible with various server configurations
+// as possible, but it's nonetheless recommended to adjust values as needed.
 fn default_worker_count() -> usize {
     1
 }
@@ -116,6 +121,7 @@ fn default_volume_size() -> String {
     String::from("8G")
 }
 
+/// AWS S3-compatible storage configuration.
 #[derive(Deserialize)]
 pub struct Storage {
     /// Access key identifier.
@@ -134,6 +140,7 @@ pub struct Storage {
     pub source_code_bucket: String,
 }
 
+/// General configuration.
 #[derive(Deserialize)]
 pub struct Config {
     /// General database configuration.
@@ -155,6 +162,7 @@ pub struct Config {
     /// Storage configuration.
     pub storage: Storage,
 
+    /// Enable payments support.
     #[serde(default = "default_payments")]
     pub payments: bool,
 }
@@ -164,11 +172,38 @@ fn default_payments() -> bool {
 }
 
 impl Config {
-    /// Create new config using default configuration file.
+    /// Create new config using default configuration file or environment variables.
+    ///
+    /// See [`Env`] for more details on how to use environment variables configuration.
+    ///
+    /// [`Env`]: figment::providers::Env
     pub fn new() -> Result<Self, figment::Error> {
         Figment::new()
             .merge(Toml::file("Config.toml"))
             .merge(Env::prefixed("CONFIG_").split("_"))
             .extract()
+    }
+
+    /// Create new config suitable for running unit tests.
+    #[cfg(feature = "test-utils")]
+    pub fn for_tests() -> Self {
+        Self {
+            database: Database {
+                url: String::from("sqlite::memory:"),
+            },
+            server: Some(Server {
+                address: "127.0.0.1:3000".parse().unwrap(),
+            }),
+            logging: Logging::default(),
+            builder: None,
+            storage: Storage {
+                access_key_id: String::new(),
+                secret_access_key: String::new(),
+                region: String::new(),
+                endpoint_url: String::new(),
+                source_code_bucket: String::new(),
+            },
+            payments: false,
+        }
     }
 }

@@ -16,6 +16,15 @@ use db::{
 };
 use derive_more::{Display, Error, From};
 
+/// User identifier typed wrapper.
+///
+/// # TOCTOU prevention
+///
+/// Be aware that there is no guarantee that the user identifier
+/// wrapped here is still valid.
+///
+/// To correctly ensure that the wrapped user identifier is valid
+/// you must use it inside of a database transaction.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct AuthenticatedUserId(i64);
 
@@ -26,23 +35,39 @@ impl AuthenticatedUserId {
     }
 }
 
+/// Errors that may occur during authentication process.
 #[derive(ErrorResponse, Display, From, Error)]
 pub(super) enum AuthenticationError {
+    /// Database-related error.
     DatabaseError(DbErr),
 
+    /// User provided incorrect authentication token.
     #[status(StatusCode::FORBIDDEN)]
     #[display(fmt = "invalid authentication token was provided")]
     InvalidAuthenticationToken,
 
+    /// User attempted to access a protected route without a verified key.
     #[status(StatusCode::FORBIDDEN)]
     #[display(fmt = "at least one verified key is required to access")]
     MissingKeys,
 
+    /// User without membership attempted to access a protected route.
     #[status(StatusCode::FORBIDDEN)]
     #[display(fmt = "paid membership is required to access")]
     PaymentRequired,
 }
 
+/// Authentication middleware for [`axum`].
+///
+/// # Generics
+///
+/// This function accepts two generics which configure the middleware
+/// behaviour and internal checks.
+///
+/// Set `REQUIRE_VERIFIED_KEY` to require users to have at least verified key
+/// to access a route.
+///
+/// Set `REQUIRE_PAYMENT` to require users to have a membership to access a route.
 pub(super) async fn require_authentication<
     const REQUIRE_VERIFIED_KEY: bool,
     const REQUIRE_PAYMENT: bool,

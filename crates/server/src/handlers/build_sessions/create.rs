@@ -14,39 +14,53 @@ use validator::Validate;
 
 use crate::{auth::AuthenticatedUserId, validation::ValidatedJson};
 
+/// Regular expression to match stable versions of Rust toolchain and `cargo-contract`.
+///
+/// Currently, this regex does not support any nightly or unstable versions of the previously mentioned tooling.
 static VERSION_REGEX: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r#"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$"#).expect("invalid regex string")
 });
 
+/// Errors that may occur during the build session creation process.
 #[derive(ErrorResponse, Display, From, Error)]
 pub(super) enum BuildSessionCreateError {
+    /// Database-related error.
     DatabaseError(DbErr),
 
+    /// User was already deleted at the time the request was being executed.
     #[status(StatusCode::FORBIDDEN)]
     #[display(fmt = "non-existent user")]
     NonExistentUser,
 
+    /// Provided source code identifier does not exist.
     #[status(StatusCode::NOT_FOUND)]
     #[display(fmt = "source code not found")]
     SourceCodeNotFound,
 }
 
+/// JSON request body.
 #[derive(Deserialize, Validate)]
 pub(super) struct BuildSessionCreateRequest {
+    /// Source code identifier.
     source_code_id: i64,
 
+    /// `cargo-contract` tooling version.
     #[validate(regex = "VERSION_REGEX")]
     cargo_contract_version: String,
 
+    /// Rust tooling version.
     #[validate(regex = "VERSION_REGEX")]
     rustc_version: String,
 }
 
+/// JSON response body.
 #[derive(Serialize)]
 pub(super) struct BuildSessionCreateResponse {
+    /// Build session identifier.
     id: i64,
 }
 
+/// Build session creation handler.
 pub(super) async fn create(
     Extension(current_user): Extension<AuthenticatedUserId>,
     State(db): State<Arc<DatabaseConnection>>,
@@ -154,7 +168,7 @@ mod tests {
 
         let (token, source_code_id) = create_test_env(&db).await;
 
-        let response = crate::app_router(Arc::new(db), Arc::new(Config::new().unwrap()))
+        let response = crate::app_router(Arc::new(db), Arc::new(Config::for_tests()))
             .oneshot(
                 Request::builder()
                     .method("POST")
@@ -182,7 +196,7 @@ mod tests {
 
         let (token, source_code_id) = create_test_env(&db).await;
 
-        let response = crate::app_router(Arc::new(db), Arc::new(Config::new().unwrap()))
+        let response = crate::app_router(Arc::new(db), Arc::new(Config::for_tests()))
             .oneshot(
                 Request::builder()
                     .method("POST")
@@ -208,7 +222,7 @@ mod tests {
 
         let (token, _) = create_test_env(&db).await;
 
-        let response = crate::app_router(Arc::new(db), Arc::new(Config::new().unwrap()))
+        let response = crate::app_router(Arc::new(db), Arc::new(Config::for_tests()))
             .oneshot(
                 Request::builder()
                     .method("POST")

@@ -1,5 +1,14 @@
+//! Verified public key associated with a single user.
+//!
+//! Public keys information is required to authenticate users in a simple
+//! and wallet vendor-independent manner.
+//!
+//! Public key verification is done by signing some generated message
+//! and verifying that the signature corresponds to the requested public key value.
+
 use sea_orm::entity::prelude::*;
 
+/// Public key model.
 #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
 #[sea_orm(table_name = "public_keys")]
 pub struct Model {
@@ -10,6 +19,7 @@ pub struct Model {
     pub created_at: TimeDateTime,
 }
 
+/// Public key model relations.
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
     #[sea_orm(

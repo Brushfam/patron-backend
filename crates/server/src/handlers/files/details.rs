@@ -10,30 +10,47 @@ use db::{file, ColumnTrait, DatabaseConnection, DbErr, EntityTrait, QueryFilter,
 use derive_more::{Display, Error, From};
 use serde::{Deserialize, Serialize};
 
+/// Max count of files that can be fetched from the database.
 const MAX_FILES: u64 = 1000;
 
+/// Query string that contains an optional file path to fetch.
 #[derive(Deserialize)]
 pub(super) struct DetailsQuery {
+    /// File path.
+    ///
+    /// If [`None`], a list of file names will be returned instead.
     #[serde(default)]
     file: Option<String>,
 }
 
+/// JSON response body.
 #[derive(Serialize)]
 #[serde(untagged)]
 pub(super) enum DetailsResponse {
+    /// Contents of a single file.
     File { text: String },
+
+    /// List of related file names.
     List { files: Vec<String> },
 }
 
+/// Errors that may occur during the file details request handling.
 #[derive(ErrorResponse, Display, From, Error)]
 pub(super) enum DetailsError {
+    /// Database-related error.
     DatabaseError(DbErr),
 
+    /// The requested file was not found.
     #[status(StatusCode::NOT_FOUND)]
     #[display(fmt = "file not found")]
     FileNotFound,
 }
 
+/// File details request handler.
+///
+/// Depending on query string contents, this route may either return
+/// a list of files related to the provided source code identifier,
+/// or a single file inside of a source code archive.
 pub(super) async fn details(
     State(db): State<Arc<DatabaseConnection>>,
     Path(source_code_id): Path<i64>,
@@ -115,7 +132,7 @@ mod tests {
 
         let source_code_id = create_test_env(&db).await;
 
-        let response = crate::app_router(Arc::new(db), Arc::new(Config::new().unwrap()))
+        let response = crate::app_router(Arc::new(db), Arc::new(Config::for_tests()))
             .oneshot(
                 Request::builder()
                     .method("GET")
@@ -137,7 +154,7 @@ mod tests {
 
         let source_code_id = create_test_env(&db).await;
 
-        let response = crate::app_router(Arc::new(db), Arc::new(Config::new().unwrap()))
+        let response = crate::app_router(Arc::new(db), Arc::new(Config::for_tests()))
             .oneshot(
                 Request::builder()
                     .method("GET")
@@ -157,7 +174,7 @@ mod tests {
 
         let source_code_id = create_test_env(&db).await;
 
-        let response = crate::app_router(Arc::new(db), Arc::new(Config::new().unwrap()))
+        let response = crate::app_router(Arc::new(db), Arc::new(Config::for_tests()))
             .oneshot(
                 Request::builder()
                     .method("GET")

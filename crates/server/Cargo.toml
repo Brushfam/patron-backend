@@ -27,6 +27,7 @@ db = { path = "../db" }
 
 [dev-dependencies]
 assert_json = "0.1.0"
+common = { path = "../common", features = ["logging", "s3", "rpc", "test-utils"] }
 common-multipart-rfc7578 = "0.6.0"
 db = { path = "../db", features = ["testing"] }
 hyper = "0.14.26"

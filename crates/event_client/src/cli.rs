@@ -10,13 +10,16 @@ pub use traverse::traverse;
 pub use update_contract::update_contract;
 pub use watch::watch;
 
+/// Primary CLI configuration, serves as an entrypoint to [`clap`].
 #[derive(Parser)]
 #[command(about, version)]
 pub(crate) struct Cli {
+    /// Selected subcommand.
     #[command(subcommand)]
     pub command: Command,
 }
 
+/// Supported subcommands.
 #[derive(Subcommand)]
 pub(crate) enum Command {
     /// Initialize new node with the provided options.

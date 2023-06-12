@@ -24,3 +24,4 @@ tracing-subscriber = { version = "0.3.17", optional = true }
 logging = ["tracing-core", "tracing-subscriber"]
 s3 = ["aws-config", "aws-sdk-s3"]
 rpc = ["futures-util", "itertools", "pallet-contracts-primitives", "parity-scale-codec", "subxt"]
+test-utils = []

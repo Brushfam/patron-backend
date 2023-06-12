@@ -16,30 +16,49 @@ use serde::Serialize;
 
 use crate::auth::AuthenticatedUserId;
 
+/// Errors that may occur during the source code upload process.
 #[derive(ErrorResponse, Display, From, Error)]
 pub(super) enum SourceCodeUploadError {
+    /// Database-related error.
     DatabaseError(DbErr),
+
+    /// `multipart/form-data` request handling error.
     MultipartError(MultipartError),
+
+    /// AWS S3-related error.
     S3Error(s3::Error),
 
+    /// Request didn't have any file uploads in it.
     #[status(StatusCode::UNPROCESSABLE_ENTITY)]
     #[display(fmt = "no file upload was found")]
     NoFileUpload,
 
+    /// Provided archive mime type is incorrect.
     #[status(StatusCode::UNPROCESSABLE_ENTITY)]
     #[display(fmt = "incorrect file content type")]
     IncorrectContentType,
 
+    /// Deleted user attempted to upload an archive.
     #[status(StatusCode::FORBIDDEN)]
     #[display(fmt = "non-existent user")]
     NonExistentUser,
 }
 
+/// JSON response body.
 #[derive(Serialize)]
 pub(super) struct SourceCodeUploadResponse {
+    /// Source code identifier.
     id: i64,
 }
 
+/// Upload a new source code archive for later usages in build sessions.
+///
+/// This route accepts a `multipart/form-data` form with a single file field
+/// that contains a ZIP archive, which will later be identified by its [`blake2`](common::hash::blake2)
+/// hash.
+///
+/// Restrictions on file upload size are currently imposed via an HTTP proxy server,
+/// and not the API server itself.
 pub(super) async fn upload(
     Extension(current_user): Extension<AuthenticatedUserId>,
     Extension(config): Extension<Arc<Config>>,

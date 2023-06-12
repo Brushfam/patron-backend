@@ -24,26 +24,46 @@ use super::{
     volume::VolumeError,
 };
 
+/// [`Duration`] between each failed build session fetch attempt.
 const UPDATE_PERIOD: Duration = Duration::from_secs(5);
 
+/// Worker errors, which are usually caused by the deployment environment itself.
+///
+/// Such errors indicate that an error is not constrained to a single build session,
+/// and thus must be dealt with by the builder server administrator.
 #[derive(Debug, Display, Error, From)]
 pub(crate) enum WorkerError {
+    /// Database-related error.
     DatabaseError(DbErr),
+
+    /// Docker-related error.
     DockerError(bollard::errors::Error),
+
+    /// IO-related error.
     IoError(io::Error),
+
+    /// S3 storage-related error.
     S3Error(s3::Error),
+
+    /// Volume-related error.
     VolumeError(VolumeError),
 
-    #[display(fmt = "incorrect build session: {}", _0)]
-    IncorrectBuildSession(#[error(ignore)] i64),
-
+    /// Unable to acquire a [build session token](db::build_session_token)
     #[display(fmt = "missing build session token")]
     MissingBuildSessionToken,
 
+    /// Unable to find a [source code](db::source_code) related to the current build session.
     #[display(fmt = "missing source code")]
     MissingSourceCode,
 }
 
+/// Spawn a worker that will handle incoming build sessions.
+///
+/// [`Future`] returned by this function is meant to be spawned in the background,
+/// as it handles new build sessions in a loop, while also attempting to recover
+/// from any occuring errors.
+///
+/// [`Future`]: std::future::Future
 #[instrument(skip_all)]
 pub(crate) async fn spawn(
     builder_config: Arc<config::Builder>,
@@ -71,6 +91,8 @@ pub(crate) async fn spawn(
                         ])
                         .filter(build_session::Column::Status.eq(build_session::Status::New));
 
+                    // Skip any locked build sessions to handle the build session
+                    // table as a queue.
                     QuerySelect::query(&mut session_query)
                         .lock_with_behavior(LockType::NoKeyUpdate, LockBehavior::SkipLocked);
 
@@ -201,20 +223,35 @@ pub(crate) async fn spawn(
     }
 }
 
+/// Build session errors, which are constrained down to a single container
+/// and are usually caused by an incorrect user input.
 #[derive(Debug, Display, Error, From)]
 enum SessionError {
+    /// Docker-related error.
     DockerError(bollard::errors::Error),
+
+    /// Volume-related error.
     VolumeError(VolumeError),
+
+    /// Unable to remove the container.
     ContainerRemoveError(ContainerRemoveError),
+
+    /// Unable to download files from the container.
     DownloadFromContainerError(DownloadFromContainerError),
 
+    /// Container finished its execution with a status code.
     #[display(fmt = "container exited with status code {}", _0)]
     ContainerExited(#[error(not(source))] i64),
 
+    /// Container ran out of time to complete the build.
     #[display(fmt = "container timed out")]
     TimedOut,
 }
 
+/// Handle a single build session.
+///
+/// Returns a tuple of WASM blob bytes and JSON metadata bytes if the
+/// contract build is successful, [`SessionError`] otherwise.
 async fn handle_session<'a>(
     log_sender: UnboundedSender<LogEntry>,
     build_session_id: i64,

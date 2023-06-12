@@ -1,5 +1,13 @@
+//! Registered user.
+//!
+//! User registration should be managed transparently with the authentication flow,
+//! since not much information about user is collected at all, thus allowing us
+//! to seamlessly register new users and automatically attach public keys to them
+//! for later authentications.
+
 use sea_orm::entity::prelude::*;
 
+/// User model.
 #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
 #[sea_orm(table_name = "users")]
 pub struct Model {
@@ -9,6 +17,7 @@ pub struct Model {
     pub created_at: TimeDateTime,
 }
 
+/// User model relations.
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
     #[sea_orm(has_many = "super::public_key::Entity")]

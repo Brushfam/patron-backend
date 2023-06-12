@@ -2736,6 +2736,7 @@ dependencies = [
  "sea-orm-cli",
  "sea-orm-migration",
  "tokio",
+ "tracing",
 ]
 
 [[package]]

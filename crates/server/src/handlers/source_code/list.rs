@@ -14,17 +14,24 @@ use serde::Serialize;
 
 use crate::{auth::AuthenticatedUserId, pagination::Pagination};
 
+/// A single source code archive data.
 #[derive(Serialize)]
 pub struct SourceCodeData {
+    /// Source code identifier.
     pub id: i64,
+
+    /// [`blake2`](common::hash::blake2) hash of an uploaded archive.
     pub archive_hash: Vec<u8>,
 }
 
+/// Errors that may occur during the list process.
 #[derive(ErrorResponse, Display, From, Error)]
 pub(super) enum SourceCodeListError {
+    /// Database-related error.
     DatabaseError(DbErr),
 }
 
+/// List source code archives related to the current authenticated user.
 pub(super) async fn list(
     Extension(current_user): Extension<AuthenticatedUserId>,
     State(db): State<Arc<DatabaseConnection>>,

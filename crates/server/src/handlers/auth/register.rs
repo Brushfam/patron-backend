@@ -8,16 +8,24 @@ use db::{
 use derive_more::{Display, Error, From};
 use serde::Serialize;
 
+/// Errors that may occur during the user registration process.
 #[derive(ErrorResponse, Display, From, Error)]
 pub(super) enum UserRegistrationError {
+    /// Database-related error.
     DatabaseError(DbErr),
 }
 
+/// JSON response body.
 #[derive(Serialize)]
 pub(super) struct UserRegistrationResponse {
+    /// Authentication token.
     token: String,
 }
 
+/// User registration handler.
+///
+/// This route will return an authentication token for a newly registered
+/// users to provide an ability to verify a public key for an account.
 pub(super) async fn register(
     State(db): State<Arc<DatabaseConnection>>,
 ) -> Result<Json<UserRegistrationResponse>, UserRegistrationError> {
@@ -57,7 +65,7 @@ mod tests {
     async fn register() {
         let db = create_database().await;
 
-        let response = crate::app_router(Arc::new(db), Arc::new(Config::new().unwrap()))
+        let response = crate::app_router(Arc::new(db), Arc::new(Config::for_tests()))
             .oneshot(
                 Request::builder()
                     .method("POST")

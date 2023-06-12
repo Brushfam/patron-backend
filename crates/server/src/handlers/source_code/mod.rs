@@ -1,4 +1,7 @@
+/// Source code archive list route.
 mod list;
+
+/// Source code archive upload route.
 mod upload;
 
 use std::sync::Arc;
@@ -9,6 +12,7 @@ use db::DatabaseConnection;
 
 use crate::auth;
 
+/// Create a router that provides an API server with source code management routes.
 pub(crate) fn routes(
     database: Arc<DatabaseConnection>,
     config: Arc<Config>,

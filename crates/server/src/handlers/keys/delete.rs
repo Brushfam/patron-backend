@@ -12,16 +12,21 @@ use sp_core::sr25519::Public;
 
 use crate::auth::AuthenticatedUserId;
 
+/// Errors that may occur during the public key deletion request handling.
 #[derive(ErrorResponse, Display, From, Error)]
 pub(super) enum PublicKeyDeletionError {
+    /// Database-related error.
     DatabaseError(DbErr),
 }
 
+/// JSON request body.
 #[derive(Deserialize)]
 pub(super) struct PublicKeyDeletionRequest {
+    /// Public key that has to be deleted.
     account: Public,
 }
 
+/// Delete public key attached to the current authenticated user's account.
 pub(super) async fn delete(
     Extension(current_user): Extension<AuthenticatedUserId>,
     State(db): State<Arc<DatabaseConnection>>,
@@ -95,7 +100,7 @@ mod tests {
 
         let token = create_test_env(&db).await;
 
-        let mut service = crate::app_router(Arc::new(db), Arc::new(Config::new().unwrap()));
+        let mut service = crate::app_router(Arc::new(db), Arc::new(Config::for_tests()));
 
         let response = service
             .call(

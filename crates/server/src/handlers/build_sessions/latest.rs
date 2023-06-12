@@ -15,20 +15,28 @@ use serde::Serialize;
 
 use crate::hex_hash::HexHash;
 
+/// JSON response body.
 #[derive(Serialize)]
 pub struct BuildSessionLatestData {
+    /// Code hash corresponding to the provided source code archive hash.
     pub code_hash: String,
 }
 
+/// Errors that may occur during the request handling.
 #[derive(ErrorResponse, Display, From, Error)]
 pub(super) enum BuildSessionLatestError {
+    /// Database-related error.
     DatabaseError(DbErr),
 
+    /// Provided archive hash doesn't have any completed build sessions.
     #[status(StatusCode::NOT_FOUND)]
     #[display(fmt = "no related build sessions were found")]
     NoRelatedBuildSessions,
 }
 
+/// Handler for getting the latest code hash that corresponds to the provided archive hash.
+///
+/// This handler searches only for successful build sessions, as code hashes are generated only for those.
 pub(super) async fn latest(
     State(db): State<Arc<DatabaseConnection>>,
     Path(archive_hash): Path<HexHash>,
@@ -125,7 +133,7 @@ mod tests {
 
         create_test_env(&db).await;
 
-        let response = crate::app_router(Arc::new(db), Arc::new(Config::new().unwrap()))
+        let response = crate::app_router(Arc::new(db), Arc::new(Config::for_tests()))
             .oneshot(
                 Request::builder()
                     .method("GET")
@@ -147,7 +155,7 @@ mod tests {
 
         create_test_env(&db).await;
 
-        let response = crate::app_router(Arc::new(db), Arc::new(Config::new().unwrap()))
+        let response = crate::app_router(Arc::new(db), Arc::new(Config::for_tests()))
             .oneshot(
                 Request::builder()
                     .method("GET")

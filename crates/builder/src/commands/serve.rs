@@ -10,11 +10,14 @@ use tracing::{info, instrument};
 
 use crate::{log_collector, process::worker};
 
+/// `serve` command errors.
 #[derive(Display, Debug, From, Error)]
 pub enum ServeError {
+    /// Database-related error.
     DbErr(DbErr),
 }
 
+/// Spawn build session workers to handle new build sessions.
 #[instrument(skip_all, err)]
 pub async fn serve(
     builder_config: config::Builder,

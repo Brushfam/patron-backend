@@ -1,3 +1,11 @@
+//! # Database models and interation utilities
+//!
+//! This crate provides definitions for database models that can be used, in conjunction
+//! with [`sea_orm`], to interact with the database in a typed manner.
+//!
+//! Additionally, this crate provides with utilities to map transaction errors ([`TransactionErrorExt::into_raw_result`])
+//! and to provide other crates with commonly used `SELECT` query utilities [`SelectExt`].
+
 pub mod build_session;
 pub mod build_session_token;
 pub mod cli_token;
@@ -22,9 +30,56 @@ pub use sea_orm::{
 };
 pub use time::{OffsetDateTime, PrimitiveDateTime};
 
+/// Utility methods for operating with transaction errors.
 pub trait TransactionErrorExt<T, E> {
-    /// Convert transaction [`Result`] into a [`Result`] with
-    /// a custom error.
+    /// Convert transaction [`Result`] into a [`Result`] with a custom error.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use std::{error::Error, fmt::{self, Display}};
+    ///
+    /// use db::{DbErr, TransactionError, TransactionErrorExt, TransactionTrait};
+    /// use tokio::runtime::Runtime;
+    ///
+    /// #[derive(Debug)]
+    /// enum CustomError {
+    ///     DbErr(DbErr),
+    ///     Custom
+    /// }
+    ///
+    /// impl Display for CustomError {
+    ///     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    ///         write!(f, "custom error")
+    ///     }
+    /// }
+    ///
+    /// impl Error for CustomError {}
+    ///
+    ///
+    /// impl From<DbErr> for CustomError {
+    ///     fn from(err: DbErr) -> Self {
+    ///         Self::DbErr(err)
+    ///     }
+    /// }
+    ///
+    /// Runtime::new()
+    ///     .unwrap()
+    ///     .block_on(async {
+    ///         let db = db::Database::connect("sqlite::memory:")
+    ///             .await
+    ///             .expect("unable to create test database");
+    ///
+    ///         let result: Result<(), TransactionError<CustomError>> = db.transaction(|txn| {
+    ///             Box::pin(async move {
+    ///                 Err(CustomError::Custom)
+    ///             })
+    ///         })
+    ///         .await;
+    ///
+    ///         let transformed_result: Result<(), CustomError> = result.into_raw_result();
+    ///     });
+    /// ```
     fn into_raw_result(self) -> Result<T, E>;
 }
 
@@ -41,9 +96,20 @@ where
     }
 }
 
+/// Utility methods for SELECT queries.
 #[async_trait]
 pub trait SelectExt {
     /// Check if at least one record that satisfies a query.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// // Determine if at least one record of entity exists in the database
+    /// let exists = Entity::find()
+    ///     .select_only()
+    ///     .exists(&db)
+    ///     .await?;
+    /// ```
     async fn exists<C: ConnectionTrait + Send>(self, db: &C) -> Result<bool, DbErr>;
 }
 

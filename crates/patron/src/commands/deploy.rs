@@ -17,64 +17,101 @@ use crate::{
     config::{AuthenticationConfig, AuthenticationConfigError, ProjectConfig},
 };
 
+/// `cargo-contract` repository used to install the potentially missing `cargo-contract` binary.
 const CARGO_CONTRACT_REPO: &str = "https://github.com/paritytech/cargo-contract";
 
+/// Default value passed to weight configuration flags of the `cargo-contract`.
 const DEFAULT_WEIGHT_VAL: u64 = 10_000_000_000;
 
+/// JSON response body with the code hash of a cached build session that matches some source code.
 #[derive(Deserialize)]
 struct ExistingCodeHashResponse {
+    /// Code hash hex-encoded value.
     code_hash: String,
 }
 
+/// JSON response body returned by build session creation and source code upload requests.
 #[derive(Deserialize)]
 struct CreateResponse {
+    /// Resource identifier.
     id: i64,
 }
 
+/// JSON request body that is used to create a new build session.
 #[derive(Serialize)]
 struct BuildSessionCreateRequest<'a> {
+    /// Source code identifier to build from.
     source_code_id: i64,
+
+    /// Preferred Rust toolchain version.
     rustc_version: &'a str,
+
+    /// Preferred `cargo-contract` version.
     cargo_contract_version: &'a str,
 }
 
+/// JSON response body with the status of an initiated build session.
 #[derive(Deserialize)]
 struct BuildSessionStatus {
+    /// Current build session status.
+    ///
+    /// For an enumeration of supported values see the `db` crate documentation.
     status: String,
+
+    /// Build session code hash, if the build was completed successfully.
     code_hash: Option<String>,
 }
 
+/// JSON response body with build session logs.
 #[derive(Deserialize)]
 struct BuildSessionLogs {
+    /// Contained build session logs.
     logs: Vec<BuildSessionLog>,
 }
 
+/// A single build session log entry.
 #[derive(Deserialize)]
 struct BuildSessionLog {
+    /// Log entry identifier, that can be used to paginate over build session logs.
     id: i64,
+
+    /// Log entry text value.
     text: String,
 }
 
+/// `deploy` subcommand errors.
 #[derive(Debug, Display, From, Error)]
 pub(crate) enum DeployError {
+    /// Authentication configuration error.
     Authentication(AuthenticationConfigError),
+
+    /// Unable to parse the project configuration with [`figment`].
     Figment(figment::Error),
+
+    /// IO-related error.
     Io(io::Error),
+
+    /// HTTP client error.
     Http(reqwest::Error),
 
+    /// Zip archiver error.
     #[display(fmt = "unable to create zip archive: {}", _0)]
     Archiver(ArchiverError),
 
+    /// [`which`] crate was unable to determine location of the `cargo` binary file.
     #[display(fmt = "unable to locate cargo: {}", _0)]
     Which(which::Error),
 
+    /// Unable to install `cargo-contract` binary.
     #[display(fmt = "unable to install cargo-contract")]
     CargoContractInstallError,
 
+    /// Contract could not be instantiated from the downloaded WASM blob.
     #[display(fmt = "unable to instantiate a contract")]
     InstantiationError,
 }
 
+/// Deployment flow entrypoint.
 pub(crate) fn deploy(
     Deploy {
         constructor,

@@ -16,36 +16,55 @@ use serde::{Deserialize, Serialize};
 
 use crate::hex_hash::HexHash;
 
+/// Errors that may occur during the log list request.
 #[derive(ErrorResponse, Display, From, Error)]
 pub(super) enum BuildSessionLogsError {
+    /// Database-related error.
     DatabaseError(DbErr),
 
+    /// Provided identifier could not be parsed as a code hash or as a numeric identifier.
     #[status(StatusCode::BAD_REQUEST)]
     #[display(fmt = "unknown identifier format, use either code hash or numeric id")]
     UnknownIdFormat,
 
+    /// Provided identifier does not have any related resource.
     #[status(StatusCode::NOT_FOUND)]
     #[display(fmt = "code not found")]
     NotFound,
 }
 
+/// Query string that can be used to offset a log list.
 #[derive(Deserialize)]
 pub(super) struct BuildSessionLogsQuery {
+    /// Current log position.
+    ///
+    /// If [`Some`], only those log entries with
+    /// identifiers greater than the value provided in this
+    /// field will be returned.
     #[serde(default)]
     position: Option<i64>,
 }
 
+/// A single log entry.
 #[derive(Serialize)]
 pub(super) struct LogEntry {
+    /// Log entry identifier.
     id: i64,
+
+    /// Log entry text value.
     text: String,
 }
 
+/// JSON response body.
 #[derive(Serialize)]
 pub(super) struct BuildSessionLogsResponse {
     logs: Vec<LogEntry>,
 }
 
+/// Build session log list request handler.
+///
+/// This route supports multiple identifier formats for web UI
+/// and CLI usage.
 pub(super) async fn logs(
     Path(id): Path<String>,
     State(db): State<Arc<DatabaseConnection>>,
@@ -167,7 +186,7 @@ mod tests {
 
         let build_session_id = create_test_env(&db).await;
 
-        let response = crate::app_router(Arc::new(db), Arc::new(Config::new().unwrap()))
+        let response = crate::app_router(Arc::new(db), Arc::new(Config::for_tests()))
             .oneshot(
                 Request::builder()
                     .method("GET")
@@ -202,7 +221,7 @@ mod tests {
 
         create_test_env(&db).await;
 
-        let response = crate::app_router(Arc::new(db), Arc::new(Config::new().unwrap()))
+        let response = crate::app_router(Arc::new(db), Arc::new(Config::for_tests()))
             .oneshot(
                 Request::builder()
                     .method("GET")
@@ -237,7 +256,7 @@ mod tests {
 
         let build_session_id = create_test_env(&db).await;
 
-        let response = crate::app_router(Arc::new(db), Arc::new(Config::new().unwrap()))
+        let response = crate::app_router(Arc::new(db), Arc::new(Config::for_tests()))
             .oneshot(
                 Request::builder()
                     .method("GET")
@@ -265,7 +284,7 @@ mod tests {
     async fn unknown() {
         let db = create_database().await;
 
-        let response = crate::app_router(Arc::new(db), Arc::new(Config::new().unwrap()))
+        let response = crate::app_router(Arc::new(db), Arc::new(Config::for_tests()))
             .oneshot(
                 Request::builder()
                     .method("GET")

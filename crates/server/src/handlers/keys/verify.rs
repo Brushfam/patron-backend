@@ -15,25 +15,43 @@ use sp_core::{
 
 use crate::auth::AuthenticatedUserId;
 
+/// Errors that may occur during the public key verification process.
 #[derive(ErrorResponse, Display, From, Error)]
 pub(super) enum PublicKeyVerificationError {
+    /// Database-related error.
     DatabaseError(DbErr),
 
+    /// The provided public key is already in use by this or another account.
     #[status(StatusCode::FORBIDDEN)]
     #[display(fmt = "account already exists")]
     AccountExists,
 
+    /// User provided an invalid signature.
     #[status(StatusCode::UNPROCESSABLE_ENTITY)]
     #[display(fmt = "invalid signature")]
     InvalidSignature,
 }
 
+/// JSON request body.
 #[derive(Deserialize)]
 pub(super) struct PublicKeyVerificationRequest {
+    /// Public key text value.
     account: Public,
+
+    /// Signed verification message.
+    ///
+    /// Verification message consists of
+    /// a string equal to the account address
+    /// used for verification purposes.
+    ///
+    /// Example: `<Bytes>5FeLhJAs4CUHqpWmPDBLeL7NLAoHsB2ZuFZ5Mk62EgYemtFj</Bytes>`
     signature: Signature,
 }
 
+/// Verify a public key and attach it to the current authenticated user's account on success.
+///
+/// For more information on the format used for verification
+/// signature see [`PublicKeyVerificationRequest`].
 pub(super) async fn verify(
     Extension(current_user): Extension<AuthenticatedUserId>,
     State(db): State<Arc<DatabaseConnection>>,
@@ -119,7 +137,7 @@ mod tests {
 
         let token = create_test_env(&db).await;
 
-        let mut service = crate::app_router(Arc::new(db), Arc::new(Config::new().unwrap()));
+        let mut service = crate::app_router(Arc::new(db), Arc::new(Config::for_tests()));
 
         let response = service
             .call(

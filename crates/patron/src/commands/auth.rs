@@ -16,24 +16,34 @@ use crate::{
     },
 };
 
+/// Length of a random locally generated token.
 const EXCHANGE_TOKEN_LENGTH: usize = 64;
 
+/// JSON request body used to exchange locally generated token for an authentication one.
 #[derive(Serialize)]
 struct ExchangeRequest<'a> {
+    /// Locally generated token.
     cli_token: &'a str,
 }
 
+/// JSON response body with the authentication token.
 #[derive(Deserialize)]
 struct ExchangeResponse {
+    /// Authentication token.
     token: String,
 }
 
+/// `auth` subcommand errors.
 #[derive(Debug, Display, From, Error)]
 pub(crate) enum AuthError {
+    /// Authentication configuration error.
     Authentication(AuthenticationConfigError),
+
+    /// HTTP client error.
     Http(reqwest::Error),
 }
 
+/// Authentication flow entrypoint.
 pub(crate) fn auth(
     Auth {
         server_path,

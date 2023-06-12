@@ -14,25 +14,37 @@ use sp_core::{
     ByteArray,
 };
 
+/// Errors that may occur during the contract details request handling.
 #[derive(ErrorResponse, Display, From, Error)]
 pub(super) enum ContractDetailsError {
+    /// Database-related error.
     DatabaseError(DbErr),
 
+    /// Owner account attached to a contract is invalid.
     #[status(StatusCode::UNPROCESSABLE_ENTITY)]
     #[display(fmt = "incorrect address size of an owner account")]
     IncorrectAddressSizeOfOwner,
 
+    /// The requested contract was not found.
     #[status(StatusCode::NOT_FOUND)]
     #[display(fmt = "contract not found")]
     ContractNotFound,
 }
 
+/// A single contract data.
 #[derive(Serialize)]
 pub struct ContractData {
+    /// Related code hash.
     pub code_hash: String,
+
+    /// Contract owner.
+    ///
+    /// This field is only available is the contract
+    /// was discovered after the initial activation of an event server.
     pub owner: Option<String>,
 }
 
+/// Contract details request handler.
 pub(super) async fn details(
     Path(account): Path<AccountId32>,
     State(db): State<Arc<DatabaseConnection>>,
@@ -119,7 +131,7 @@ mod tests {
 
         create_test_env(&db).await;
 
-        let response = crate::app_router(Arc::new(db), Arc::new(Config::new().unwrap()))
+        let response = crate::app_router(Arc::new(db), Arc::new(Config::for_tests()))
             .oneshot(
                 Request::builder()
                     .method("GET")
@@ -140,7 +152,7 @@ mod tests {
     async fn unknown() {
         let db = create_database().await;
 
-        let response = crate::app_router(Arc::new(db), Arc::new(Config::new().unwrap()))
+        let response = crate::app_router(Arc::new(db), Arc::new(Config::for_tests()))
             .oneshot(
                 Request::builder()
                     .method("GET")

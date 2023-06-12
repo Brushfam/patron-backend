@@ -2,10 +2,13 @@ use std::{array::TryFromSliceError, fmt, str::FromStr, sync::Arc};
 
 use axum::{extract::State, http::StatusCode, Extension, Json};
 use axum_derive_error::ErrorResponse;
-use common::rpc::{
-    parity_scale_codec::{self, Decode},
-    subxt::{self, ext::sp_runtime::DispatchError, OnlineClient, PolkadotConfig},
-    InvalidSchema, Schema,
+use common::{
+    hash::blake2,
+    rpc::{
+        parity_scale_codec::{self, Decode},
+        subxt::{self, ext::sp_runtime::DispatchError, OnlineClient, PolkadotConfig},
+        InvalidSchema, Schema,
+    },
 };
 use db::{
     node, public_key, user, ActiveValue, ColumnTrait, DatabaseConnection, DbErr, EntityTrait,
@@ -14,53 +17,77 @@ use db::{
 use derive_more::{Display, Error, From};
 use ink_metadata::LangError;
 use serde::Deserialize;
-use sp_core::{blake2_256, crypto::AccountId32};
+use sp_core::crypto::AccountId32;
 
 use crate::auth::AuthenticatedUserId;
 
+/// JSON request body.
 #[derive(Deserialize)]
 pub(super) struct PaymentCheckRequest {
+    /// Node identifier used to check the membership payment.
     node_id: i64,
+
+    /// Account identifier against which the check will be executed.
     account: AccountId32,
 }
 
+/// Errors that may occur during the membership check process.
 #[derive(ErrorResponse, Display, From, Error)]
 pub(super) enum PaymentCheckError {
+    /// Database-related error.
     DatabaseError(DbErr),
+
+    /// Invalid schema name is stored inside of a database.
     Schema(InvalidSchema),
+
+    /// Substrate RPC-related error.
     Rpc(subxt::Error),
+
+    /// Contract call dispatch error.
     Dispatch(WrappedDispatchError),
+
+    /// SCALE codec error.
     Scale(parity_scale_codec::Error),
+
+    /// Contract address stored inside of a database is invalid.
     ContractAddress(TryFromSliceError),
 
+    /// Contract call error.
     #[display(fmt = "unable to call the contract")]
     CallError,
 
+    /// Deleted user attempted to access the route.
     #[status(StatusCode::FORBIDDEN)]
     #[display(fmt = "user doesn't exist")]
     NonExistentUser,
 
+    /// Provided account address is incorrect.
     #[status(StatusCode::BAD_REQUEST)]
     #[display(fmt = "invalid account was provided")]
     InvalidKey,
 
+    /// Provided node identifier is incorrect.
     #[status(StatusCode::NOT_FOUND)]
     #[display(fmt = "invalid node id")]
     InvalidNodeId,
 
+    /// Provided node identifier is not marked as the one that supports payments.
     #[status(StatusCode::BAD_REQUEST)]
     #[display(fmt = "provided node doesn't support payments")]
     NodeWithoutPayments,
 
+    /// Membership check returned a negative result.
     #[status(StatusCode::BAD_REQUEST)]
     #[display(fmt = "payment required")]
     PaymentRequired,
 
+    /// Paid user attempted to check the membership again.
     #[status(StatusCode::BAD_REQUEST)]
     #[display(fmt = "user already has membership available")]
     PaidAlready,
 }
 
+/// [`DispatchError`] wrapper that provides an implementation of [`std::error::Error`] trait.
 #[derive(Debug)]
 pub(super) struct WrappedDispatchError(DispatchError);
 
@@ -72,6 +99,9 @@ impl fmt::Display for WrappedDispatchError {
 
 impl std::error::Error for WrappedDispatchError {}
 
+/// Check current authenticated user's membership.
+///
+/// Consult self-hosted documentation for more information on supported smart contract ABI.
 pub(super) async fn check(
     Extension(current_user): Extension<AuthenticatedUserId>,
     State(db): State<Arc<DatabaseConnection>>,
@@ -119,7 +149,7 @@ pub(super) async fn check(
 
             // Make sure this matches the ABI of the check message.
             let mut data = Vec::with_capacity(36);
-            data.extend_from_slice(&blake2_256("check".as_bytes())[0..4]);
+            data.extend_from_slice(&blake2("check".as_bytes())[0..4]);
             data.extend_from_slice(request.account.as_ref());
 
             let raw_response = schema

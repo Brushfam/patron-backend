@@ -15,20 +15,28 @@ use sp_core::crypto::AccountId32;
 
 use crate::{auth::AuthenticatedUserId, pagination::Pagination};
 
+/// A single public key data.
 #[derive(Serialize)]
 pub struct PublicKeyData {
+    /// Public key identifier.
     pub id: i64,
+
+    /// Account address.
     pub address: AccountId32,
 }
 
+/// Errors that may occur during the public key list request handling.
 #[derive(ErrorResponse, Display, From, Error)]
 pub(super) enum PublicKeyListError {
+    /// Database-related error.
     DatabaseError(DbErr),
 
+    /// Public key stored inside of a database has an invalid size.
     #[display(fmt = "invalid public key size stored in db")]
     InvalidPublicKeySize,
 }
 
+/// List public keys attached to the current authenticated user's account.
 pub(super) async fn list(
     Extension(current_user): Extension<AuthenticatedUserId>,
     State(db): State<Arc<DatabaseConnection>>,

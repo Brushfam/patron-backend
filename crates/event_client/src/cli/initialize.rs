@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use common::rpc::{
     subxt::{self, utils::AccountId32, OnlineClient, PolkadotConfig},
-    InvalidSchema, Schema,
+    InvalidSchema, Schema, PAGE_SIZE,
 };
 use db::{
     code, contract, node, sea_query::OnConflict, ActiveValue, DatabaseConnection, DbErr,
@@ -13,23 +13,35 @@ use futures_util::{TryFutureExt, TryStreamExt};
 
 use crate::utils::{extract_code_hash, extract_twox_account_id};
 
-const PAGE_SIZE: u32 = 10;
-
+/// Errors thay may occur during initialization process.
 #[derive(Debug, Display, Error, From)]
 pub enum InitializeError {
+    /// Database-related error.
     DatabaseError(DbErr),
+
+    /// Substrate RPC-related error.
     RpcError(subxt::Error),
+
+    /// User provided invalid schema name.
     Schema(InvalidSchema),
 
+    /// Invalid payment contract account id was provided.
     #[display(fmt = "invalid account id for payment contract")]
     InvalidPaymentAddress,
 }
 
 /// Initialize an RPC node from the provided data.
 ///
-/// This method does not traverse chain for new events,
-/// but does initialize a database from existing contracts
-/// and code uploads.
+/// # Details
+///
+/// This method obtains information about the latest block available and
+/// acquires smart contract information and uploaded WASM blob details
+/// related to that block.
+///
+/// You have to run this command every time you add a new node to the database,
+/// since [`initialize`] function initializes node information too.
+///
+/// No traversal of previous blocks is being done by this command.
 pub async fn initialize(
     database: DatabaseConnection,
     name: String,
@@ -50,6 +62,10 @@ pub async fn initialize(
         .map_err(|_| InitializeError::InvalidPaymentAddress)?
         .map(|addr| addr.0.to_vec());
 
+    // Attempt to add all the information in a single transaction.
+    //
+    // Confirmed block value is set to the value of latest block number
+    // we acquired earlier.
     database
         .transaction(|txn| {
             Box::pin(async move {

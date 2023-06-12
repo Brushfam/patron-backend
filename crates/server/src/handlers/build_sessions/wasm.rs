@@ -10,15 +10,19 @@ use derive_more::{Display, Error, From};
 
 use crate::hex_hash::HexHash;
 
+/// Errors that may occur during the WASM blob request handling.
 #[derive(ErrorResponse, Display, From, Error)]
 pub(super) enum BuildSessionWasmError {
+    /// Database-related error.
     DatabaseError(DbErr),
 
+    /// The provided code hash doesn't have any WASM blobs saved in the database.
     #[status(StatusCode::NOT_FOUND)]
     #[display(fmt = "code not found")]
     CodeNotFound,
 }
 
+/// WASM blob request handler.
 pub(super) async fn wasm(
     Path(code_hash): Path<HexHash>,
     State(db): State<Arc<DatabaseConnection>>,
@@ -65,7 +69,7 @@ mod tests {
 
         create_test_code(&db).await;
 
-        let response = crate::app_router(Arc::new(db), Arc::new(Config::new().unwrap()))
+        let response = crate::app_router(Arc::new(db), Arc::new(Config::for_tests()))
             .oneshot(
                 Request::builder()
                     .method("GET")
@@ -83,7 +87,7 @@ mod tests {
     async fn unknown() {
         let db: DatabaseConnection = create_database().await;
 
-        let response = crate::app_router(Arc::new(db), Arc::new(Config::new().unwrap()))
+        let response = crate::app_router(Arc::new(db), Arc::new(Config::for_tests()))
             .oneshot(
                 Request::builder()
                     .method("GET")

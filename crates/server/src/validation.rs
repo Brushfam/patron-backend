@@ -8,15 +8,24 @@ use axum_derive_error::ErrorResponse;
 use derive_more::{Display, Error};
 use validator::{Validate, ValidationErrors};
 
+/// Errors related to JSON validation.
 #[derive(ErrorResponse, Display, Error)]
 pub enum ValidatedJsonRejection {
+    /// Unable to parse a JSON value.
     #[status(StatusCode::UNPROCESSABLE_ENTITY)]
     JsonParsingError(JsonRejection),
 
+    /// Unable to validate a JSON value.
     #[status(StatusCode::UNPROCESSABLE_ENTITY)]
     ValidationError(ValidationErrors),
 }
 
+/// Wrapper for [`axum`] JSON value validation.
+///
+/// Equivalent to the [`axum`]'s [`Json`] struct
+/// with [`validator`] crate support.
+///
+/// [`JSON`]: axum::extract::Json
 pub struct ValidatedJson<T>(pub T);
 
 #[async_trait]

@@ -14,17 +14,26 @@ use futures_util::TryStreamExt;
 use serde::Serialize;
 use sp_core::{crypto::AccountId32, ByteArray};
 
+/// Errors that may occur during the contract event list request handling.
 #[derive(ErrorResponse, Display, From, Error)]
 pub(super) enum ContractEventsError {
+    /// Database-related error.
     DatabaseError(DbErr),
 }
 
+/// A single contract event.
 #[derive(Serialize)]
 pub struct ContractEvent {
+    /// Serialized JSON body of a contract event.
+    ///
+    /// See [`db::event::EventBody`] for more information.
     body: String,
+
+    /// Timestamp of a block in which the event was discovered.
     timestamp: i64,
 }
 
+/// Contract event list request handler.
 pub(super) async fn events(
     Path(account): Path<AccountId32>,
     State(db): State<Arc<DatabaseConnection>>,
@@ -121,7 +130,7 @@ mod tests {
 
         create_test_env(&db).await;
 
-        let response = crate::app_router(Arc::new(db), Arc::new(Config::new().unwrap()))
+        let response = crate::app_router(Arc::new(db), Arc::new(Config::for_tests()))
             .oneshot(
                 Request::builder()
                     .method("GET")
@@ -144,7 +153,7 @@ mod tests {
     async fn unknown() {
         let db = create_database().await;
 
-        let response = crate::app_router(Arc::new(db), Arc::new(Config::new().unwrap()))
+        let response = crate::app_router(Arc::new(db), Arc::new(Config::for_tests()))
             .oneshot(
                 Request::builder()
                     .method("GET")

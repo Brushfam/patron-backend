@@ -4,11 +4,24 @@ use db::{log, ActiveModelTrait, DatabaseConnection};
 use tokio::sync::mpsc::UnboundedReceiver;
 use tracing::error;
 
+/// A single log entry passed from the build session process.
 pub(crate) struct LogEntry {
+    /// Related build session identifier.
     pub(crate) build_session_id: i64,
+
+    /// Log entry text.
+    ///
+    /// Be aware, that there is no guarantee that this text
+    /// contains only a single line of logs.
     pub(crate) text: String,
 }
 
+/// Start log collection process.
+///
+/// [`Future`] returned from this function should be
+/// spawned as a background process.
+///
+/// [`Future`]: std::future::Future
 pub(crate) async fn collect_logs(
     db: Arc<DatabaseConnection>,
     mut receiver: UnboundedReceiver<LogEntry>,

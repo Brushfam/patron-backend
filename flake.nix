@@ -123,8 +123,6 @@
             // {
               inherit cargoArtifacts;
 
-              doCheck = false;
-
               pname = "bins";
             });
 

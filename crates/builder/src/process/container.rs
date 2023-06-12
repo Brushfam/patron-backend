@@ -23,30 +23,45 @@ use futures_util::{Stream, TryStreamExt};
 
 use crate::process::volume::{Volume, VolumeError};
 
+/// Errors that may occur during container removal process.
 #[derive(Debug, Display, Error, From)]
 pub enum ContainerRemoveError {
+    /// Docker-related error.
     Docker(Error),
+
+    /// Volume-related error.
     Volume(VolumeError),
 }
 
+/// Errors that may occur during an attempt to download a file from container's filesystem.
 #[derive(Debug, Display, Error, From)]
 pub enum DownloadFromContainerError {
+    /// Docker-related error.
     Docker(Error),
+
+    /// IO-related error.
     Io(io::Error),
 
+    /// Unable to fill the byte buffer with the requested file.
     #[display(fmt = "file size limit exceeded")]
     FileSizeLimitExceeded,
 
+    /// The requested file was not found.
     #[display(fmt = "file not found")]
     FileNotFound,
 }
 
+/// A single running Docker container instance.
 pub struct Container {
+    /// Docker-specific container identifier.
     id: String,
+
+    /// Related volume.
     volume: Volume,
 }
 
 impl Container {
+    /// Spawn new Docker container with the provided configuration.
     pub async fn new<U: fmt::Display>(
         config: &config::Builder,
         client: &Docker,
@@ -56,11 +71,18 @@ impl Container {
         cargo_contract_version: &str,
         source_code_url: U,
     ) -> Result<Self, Error> {
+        // Attempt to isolate container as much as possible.
+        //
+        // The provided container configuration should protect
+        // the build process from using any unnecessary capabilities,
+        // stop the container in case if too many processes are spawned
+        // (this may occur during archive unpacking).
         let host_config = HostConfig {
             cap_add: Some(vec![String::from("DAC_OVERRIDE")]),
             cap_drop: Some(vec![String::from("ALL")]),
             memory: Some(config.memory_limit),
             memory_swap: Some(config.memory_swap_limit),
+            // Mount the passed volume as a home directory of a root user.
             mounts: Some(vec![Mount {
                 target: Some(String::from("/root")),
                 typ: Some(MountTypeEnum::VOLUME),
@@ -89,6 +111,7 @@ impl Container {
                 }),
                 Config {
                     image: Some("ink-builder"),
+                    // Pass information about the current build session to container
                     env: Some(vec![
                         &format!("SOURCE_CODE_URL={source_code_url}"),
                         &format!("CARGO_CONTRACT_VERSION={cargo_contract_version}"),
@@ -113,6 +136,7 @@ impl Container {
         })
     }
 
+    /// Get a [`Stream`] of logs from the current Docker container.
     pub async fn logs(
         &self,
         client: &Docker,
@@ -133,6 +157,9 @@ impl Container {
         Ok(raw.output)
     }
 
+    /// Get WASM blob of an ink! smart contract from the container's filesystem.
+    ///
+    /// Provided `buf` slice can be used to limit the WASM blob size.
     pub async fn wasm_file<'a>(
         &self,
         client: &Docker,
@@ -142,6 +169,9 @@ impl Container {
             .await
     }
 
+    /// Get JSON metadata of an ink! smart contract from the container's filesystem.
+    ///
+    /// Provided `buf` slice can be used to limit the JSON metadata size.
     pub async fn metadata_file<'a>(
         &self,
         client: &Docker,
@@ -151,6 +181,7 @@ impl Container {
             .await
     }
 
+    /// Get a [`Stream`] of the current Docker container process events.
     pub fn events(
         &self,
         client: &Docker,
@@ -158,6 +189,7 @@ impl Container {
         client.wait_container::<String>(&self.id, None)
     }
 
+    /// Remove the current Docker container and close the related [`Volume`].
     pub async fn remove(self, client: &Docker) -> Result<(), ContainerRemoveError> {
         client
             .remove_container(
@@ -175,6 +207,13 @@ impl Container {
         Ok(())
     }
 
+    /// Download a file from the container's filesystem to the provided buffer.
+    ///
+    /// Since Docker wraps downloaded files into a `tar` archive, we re-use the same buffer
+    /// to unarchive the downloaded file.
+    ///
+    /// To ensure that you access only the file's bytes (and not the `tar` archive's bytes)
+    /// you can use the slice returned from this function.
     async fn download_from_container_to_buf<'a>(
         &self,
         client: &Docker,

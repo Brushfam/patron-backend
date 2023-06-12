@@ -7,15 +7,25 @@ use db::{
 };
 use derive_more::{Display, Error, From};
 
+/// Errors that may occur during payment contract address update process.
 #[derive(Debug, Display, Error, From)]
 pub enum UpdateContractError {
+    /// Database-related error.
     DatabaseError(DbErr),
 
+    /// Provided account id cannot be parsed.
     #[display(fmt = "invalid account id for payment contract")]
     InvalidPaymentAddress,
 }
 
-/// Update payment contract information.
+/// Update payment contract address.
+///
+/// # Details
+///
+/// Using [`update_contract`] you can update an account id of a payment contract
+/// associated with the provided node.
+///
+/// Consult self-hosted documentation for more information on supported smart contract ABI.
 pub async fn update_contract(
     database: DatabaseConnection,
     name: String,

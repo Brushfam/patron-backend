@@ -1,3 +1,20 @@
+//! Schema abstraction over Substrate node RPC.
+//!
+//! # Schemas
+//!
+//! By introducing the concept of schemas we can utilize [`subxt`]'s typed
+//! RPC bindings while simultaneously providing other crates with abstraction
+//! to communicate with different nodes over a unified API.
+//!
+//! The core component of this module is the `Schema` enum, which allows
+//! users to pick a preferred schema for communication. Be aware, that a schema from one
+//! network may be supported by another network, even though their names are different.
+//!
+//! After creating an instance of `Schema`, you may use various methods such as
+//! `Schema::block`, `Schema::pristine_code`, etc. to receive relevant information
+//! without worrying about node specifics.
+
+/// Supported schemas.
 pub mod schemas;
 
 use std::{
@@ -24,9 +41,12 @@ use subxt::{
 pub use parity_scale_codec;
 pub use subxt;
 
-const PAGE_SIZE: u32 = 10;
+/// Default page size for fetching data with [`subxt`].
+pub const PAGE_SIZE: u32 = 10;
 
+/// Substrate node RPC schema.
 pub enum Schema<T> {
+    /// Astar schema, which can be initialized from an "astar" string.
     Astar,
 
     #[doc(hidden)]
@@ -55,6 +75,7 @@ impl<T> FromStr for Schema<T> {
     }
 }
 
+/// An error that indicates that an invalid schema was provided.
 #[derive(Debug)]
 pub struct InvalidSchema;
 
@@ -66,6 +87,9 @@ impl Display for InvalidSchema {
 
 impl std::error::Error for InvalidSchema {}
 
+/// Macro utilities to generate schema mappers.
+///
+/// See methods below for usage demonstration.
 macro_rules! schema_map {
     (fetch $self:ident, $client:ident, $at:ident, $($network:ident, $schema:ident => $address:ident, $mapper:expr, [$($val:expr),+]),+) => {
         match $self {
@@ -107,6 +131,9 @@ macro_rules! schema_map {
 }
 
 impl<T: Config + Send + Sync> Schema<T> {
+    /// Get a [`Block`] information for the provided block hash.
+    ///
+    /// If the provided hash is [`None`], the latest block is retrieved.
     pub async fn block<C: OnlineClientT<T>>(
         &self,
         client: &C,
@@ -119,6 +146,7 @@ impl<T: Config + Send + Sync> Schema<T> {
         }
     }
 
+    /// Get information on the stored code at the provided block hash.
     pub async fn pristine_code_root<C: OnlineClientT<T>>(
         &self,
         client: &C,
@@ -131,6 +159,7 @@ impl<T: Config + Send + Sync> Schema<T> {
         ))
     }
 
+    /// Get WASM blob for the provided code hash at the provided block hash.
     pub async fn pristine_code<C: OnlineClientT<T>>(
         &self,
         client: &C,
@@ -143,6 +172,7 @@ impl<T: Config + Send + Sync> Schema<T> {
         ))
     }
 
+    /// Get information on all available contracts at the provided block hash.
     pub async fn contract_info_of_root<C: OnlineClientT<T>>(
         &self,
         client: &C,
@@ -155,6 +185,7 @@ impl<T: Config + Send + Sync> Schema<T> {
         ))
     }
 
+    /// Get information about the specific contract at the provided block hash.
     pub async fn contract_info_of<C: OnlineClientT<T>>(
         &self,
         client: &C,
@@ -167,6 +198,7 @@ impl<T: Config + Send + Sync> Schema<T> {
         ))
     }
 
+    /// Get UNIX timestamp in milliseconds for the provided block hash.
     pub async fn block_timestamp_millis<C: OnlineClientT<T>>(
         &self,
         client: &C,
@@ -183,6 +215,9 @@ impl<T: Config + Send + Sync> Schema<T> {
         })
     }
 
+    /// Call the contract with the provided [`AccountId32`] and raw call data.
+    ///
+    /// Provided raw call data should match the ABI of the contract.
     pub async fn call_contract<C: OnlineClientT<T>>(
         &self,
         client: &C,
@@ -217,6 +252,11 @@ impl<T: Config + Send + Sync> Schema<T> {
         Ok(ContractExecResult::decode(&mut &*response.0)?)
     }
 
+    /// Map schema-specific event types into generic contract-related events.
+    ///
+    /// This method will return only the information about the events related to
+    /// the passed `needle` argument. You can use [`Iterator::filter_map`] to filter
+    /// returned events after calling this method.
     pub fn events<'e>(
         &self,
         events: &'e Events<T>,
@@ -258,37 +298,63 @@ impl<T: Config + Send + Sync> Schema<T> {
     }
 }
 
+/// Generic contract info.
 pub struct ContractInfo {
+    /// Code hash used for the contract.
     pub code_hash: H256,
 }
 
+/// Generic contract events.
+///
+/// This enum is used to filter relevant events using [`Schema::events`] method.
 pub enum ContractEvent {
+    /// Search for WASM blob uploads.
     CodeStored,
+
+    /// Search for contract instantiations.
     Instantiated,
+
+    /// Search for contract code hash updates.
     ContractCodeUpdated,
+
+    /// Search for contract terminations.
     Terminated,
 }
 
+/// Contract event data.
 pub enum ContractEventData {
+    /// New WASM blob was uploaded.
     CodeStored {
+        /// Code hash of the uploaded WASM blob.
         code_hash: H256,
     },
 
+    /// New contract was instantiated.
     Instantiated {
+        /// Contract account id.
         contract: AccountId32,
+
+        /// Account id of an entity that deployed the contract.
         deployer: AccountId32,
     },
 
+    /// Contract hash was updated.
     ContractCodeUpdated {
+        /// Related contract account id.
         contract: AccountId32,
+
+        /// New code hash for the related contract.
         new_code_hash: H256,
     },
 
+    /// Contract was terminated.
     Terminated {
+        /// Account id of a terminated contract.
         contract: AccountId32,
     },
 }
 
+/// Transform a [`KeyIter`] into an asynchronous [`Stream`].
 fn key_iter_to_stream<C, Client, ReturnTy>(
     key_iter: KeyIter<C, Client, ReturnTy>,
 ) -> impl Stream<Item = Result<(StorageKey, ReturnTy), Error>>

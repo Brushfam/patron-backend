@@ -11,6 +11,43 @@ For deployment/API server, there are four separate components to use:
 
 If necessary, these components can be deployed on different servers with the single database attached to them.
 
+## Repository cloning
+
+First, clone the repository using the following command:
+
+```sh
+git clone https://github.com/brushfam/patron-backend
+```
+
+## Nix installation
+
+We use the [Nix package manager](https://nixos.org) to build Docker images and various project components.
+
+Linux installation instructions are available [here](https://nixos.org/download.html#nix-install-linux).
+
+Since we utilize Nix flakes you have to configure Nix CLI to support them.
+
+1. Create a `~/.config/nix` directory using the following command: `mkdir -p ~/.config/nix`
+2. Enable `flakes` and `nix-command` features via the following command: `echo "experimental-features = nix-command flakes" > ~/.config/nix/nix.conf`
+
+## PostgreSQL
+
+PostgreSQL installation instruction may vary between different Linux distributions, the following guide is suitable for Ubuntu.
+
+1. Install PostgreSQL via the following command: `sudo apt install postgresql postgresql-contrib`
+2. Start PostgreSQL using this command: `sudo systemctl start postgresql.service`
+3. Log in as a `postgres` user: `sudo su postgres`
+4. Create a new PostgreSQL user that can create new databases and that has a password: `createuser -dP <name>`.
+Replace `<name>` with a name that suits your project.
+5. Create a new database: `createdb -h 127.0.0.1 -U <name> <database>`. Replace `<name>` with the user name
+you specified in the previous step, and `<database>` with your preferred database name.
+
+## Docker
+
+Follow the [official guide](https://docs.docker.com/engine/install/) on how to install Docker on various platforms.
+
+Don't forget to add your system user to the `docker` group to run Docker commands without root: `sudo usermod -a -G docker <user>`
+
 ## Configuration
 
 All of these components use the same configuration file `Config.toml`. The example file looks like this:
@@ -18,7 +55,7 @@ All of these components use the same configuration file `Config.toml`. The examp
 ```toml
 [database]
 # Database URL (preferrably PostgreSQL).
-url = "postgres://user:password@127.0.0.1/db"
+url = "postgres://<name>:<password>@127.0.0.1/<database>"
 
 [server]
 # HTTP server listen address.
@@ -77,10 +114,7 @@ CONFIG_STORAGE="{\
 
 ## Installation
 
-For installation of different server components it's recommended to utilize our Nix environment, which
-allows you to build Docker images and binaries with ease.
-
-Building all components:
+Building all components with Nix (this will automatically install all the necessary tools):
 
 ```sh
 nix build .#
@@ -92,13 +126,44 @@ You can also use a standard Rust toolchain for this task:
 cargo build --release
 ```
 
-To build the Docker image from scratch, you can utilize the next command:
+## Smart contract builder image
 
-```sh
-nix build .#ink-builder
+Before building the smart contract builder image itself, we need to adjust the
+API server URL in the `flake.nix` file.
+
+Search for the following snippet in `flake.nix` file:
+
+```
+url = "https://api.patron.works";
 ```
 
-Pre-built Docker images are available to download from GitHub releases.
+and adjust it for your own API server endpoint:
+
+```
+url = "https://api.example.com";
+```
+
+To build the Docker image itself, you can utilize the next command:
+
+```sh
+nix build .#docker.ink-builder
+```
+
+Load the resulting image with this command:
+
+```sh
+docker load < result
+```
+
+## Database migration manager
+
+Using the migration manager you can fill the database with the necessary for service functionality tables.
+
+To fill the database, simply run the migration manager binary with the configured `Config.toml`:
+
+```sh
+./migration
+```
 
 ## API server
 
@@ -118,10 +183,30 @@ To deploy the smart contract builder, there are several prerequisites required:
 
 * Docker to use for the build process itself;
 * `fallocate` and `mkfs.ext4` commands to create new temporary volumes;
-* udisks2 with loop device setup capabilities to allow mounting temporary volumes;
+* udisks2 with loop device setup capabilities to allow mounting temporary volumes (can be installed via `sudo apt install udisks2`);
 
-The build process is done using the Docker `ink-builder` image, so ensure that you have
-it loaded using the `docker load` command.
+You can test your Linux distribution readiness for the requirements above using the following commands
+(all of these commands must work without a root user interaction):
+
+```sh
+fallocate -l 50M image
+mkfs.ext4 image
+udisksctl loop-setup --no-user-interaction -f image
+```
+
+If loop device setup is successful without, you can remove the test file and proceed with the next part
+of this guide:
+
+```sh
+udisksctl loop-delete --no-user-interaction -b /dev/loop8
+rm image
+```
+
+If you have any errors related to `udisksctl loop-setup` permissions,
+see the ["Troubleshooting"](#troubleshooting) section of this guide.
+
+Ensure that you completed the process of building the builder image and loading it in
+the previous ["Smart contract builder image"](#smart-contract-builder-image) section of this guide.
 
 To start the builder process you can use the `serve` command:
 
@@ -143,13 +228,7 @@ To initially fill the database with contract and code data use the `initialize` 
 correctly communicate with the node.
 
 You may also optionally pass `--payment-address` flag to enable membership payments using a separate smart contract.
-
-To fill the database with missing events you can use the `traverse` command, which traverses old blocks
-for previous chain events:
-
-```sh
-./event_client traverse my_node
-```
+See the ["Membership smart contract ABI"](#membership-smart-contract-abi) for more information on that.
 
 Watching for new chain events is available with the `watch` command:
 
@@ -161,12 +240,45 @@ Event watcher will also attempt to traverse any missed blocks automatically.
 
 For more information about available commands use the `--help` flag.
 
-## Database migration manager
+## Troubleshooting
 
-Using the migration manager you can fill the database with the necessary for service functionality tables.
+### `udisksctl loop-setup` permissions
 
-To fill the database, simply run the migration manager binary with the configured `Config.toml`:
+`udisks2` daemon utilizes PolicyKit to manage user permissions to
+invoke various `udisksctl` commands.
 
-```sh
-./migration
+If you manage your system permissions via `polkit`, ensure
+that your user has an access to invoke the `org.freedesktop.udisks2.loop-setup` action.
+
+Example `polkit` rule, that allows all users in the `sudo` group to setup loop devices:
+
+```javascript
+polkit.addRule(function(action, subject) {
+    if (action.id == "org.freedesktop.udisks2.loop-setup" && subject.isInGroup("sudo")) {
+        return polkit.Result.YES;
+    }
+});
 ```
+
+JavaScript-based rules are placed inside of a following directory: `/etc/polkit-1/rules.d`.
+For example: `/etc/polkit-1/rules.d/50-loop.rules`.
+
+Example PolicyKit rule, if your distribution uses it to manage system permissions:
+
+```
+[Storage Permissions]
+Identity=unix-group:sudo
+Action=org.freedesktop.udisks2.loop-setup
+ResultAny=yes
+```
+
+PolicyKit rules can be placed inside of a following directory: `/etc/polkit-1/localauthority`.
+For example: `/etc/polkit-1/localauthority/50-local.d/55-loop.pkla`.
+
+## Membership smart contract ABI
+
+You can use any smart contract you want, as long as it adheres to the following ABI schema:
+
+* Your contract provides a method with an identifier equal to the `Blake2b256` hash value of a string "check".
+* This method accepts a single argument which is the address of an account that is being checked.
+* This method returns a single `bool` value which identifies if the check was successful or not.

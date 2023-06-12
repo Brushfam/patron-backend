@@ -14,16 +14,35 @@ use itertools::Itertools;
 
 use crate::utils::block_mapping_stream;
 
+/// Errors that may occur during traversal process.
 #[derive(Debug, Display, Error, From)]
 pub enum TraverseError {
+    /// Database-related error.
     DatabaseError(DbErr),
+
+    /// Substrate RPC-related error.
     RpcError(subxt::Error),
+
+    /// User provided invalid schema name.
     Schema(InvalidSchema),
 
+    /// The provided node name is incorrect.
     #[display(fmt = "node not found")]
     NodeNotFound,
 }
 
+/// Traverse blocks before the confirmed block for events.
+///
+/// # Details
+///
+/// This method is provided for testing purposes, as dedicated archive servers
+/// are required to correctly process old blocks in batches.
+///
+/// You can use [`traverse`] function to test your local Substrate node
+/// event dispatching.
+///
+/// If necessary, you may set up a separate service for batch block analysis
+/// and fill the database with models found in [`db`] crate.
 pub async fn traverse(database: DatabaseConnection, name: String) -> Result<(), TraverseError> {
     let node = node::Entity::find()
         .filter(node::Column::Name.eq(name))
@@ -64,10 +83,13 @@ pub async fn traverse(database: DatabaseConnection, name: String) -> Result<(), 
     Ok(())
 }
 
+/// Parsed block data.
 struct BlockData {
+    /// Smart contract instantiations found in block.
     instantiations: Vec<([u8; 32], [u8; 32])>,
 }
 
+/// Attempt to parse block associated with the provided block hash using the provided schema.
 async fn parse_block<T: Config + Send + Sync>(
     api: &OnlineClient<T>,
     schema: &Schema<T>,

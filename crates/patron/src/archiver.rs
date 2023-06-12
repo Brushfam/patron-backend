@@ -11,14 +11,28 @@ use indicatif::ProgressBar;
 use walkdir::{DirEntry, WalkDir};
 use zip::{write::FileOptions, ZipWriter};
 
+/// Errors that may occur during the archive creation process.
 #[derive(Debug, Display, From, Error)]
 pub(crate) enum ArchiverError {
+    /// [`zip`]-crate specific error.
     Zip(zip::result::ZipError),
+
+    /// [`walkdir`]-crate specific error.
     WalkDir(walkdir::Error),
+
+    /// IO error.
     Io(io::Error),
+
+    /// Unable to strip current directory prefix from path.
     StripPrefix(StripPrefixError),
 }
 
+/// Archive the current directory into the provided `file`.
+///
+/// [`build_zip_archive`] makes use of a [`walk_project_directory`] function,
+/// including its file filtering capabilities. See the corresponding documentation
+/// for more information on which files and directories are ignored during the packaging
+/// process.
 pub(crate) fn build_zip_archive<W: Write + Seek>(
     file: W,
     progress: &ProgressBar,
@@ -47,6 +61,10 @@ pub(crate) fn build_zip_archive<W: Write + Seek>(
     Ok(writer.finish()?)
 }
 
+/// Recursively iterate over the project files and directories while filtering them.
+///
+/// Returned [`Iterator`] will not yield any files or directories that are named `target`
+/// or any hidden files, names of which begin with a dot (`.git`, `.vscode`, etc.).
 fn walk_project_directory(dir: &Path) -> impl Iterator<Item = Result<DirEntry, walkdir::Error>> {
     WalkDir::new(dir).into_iter().filter_entry(|entry| {
         entry

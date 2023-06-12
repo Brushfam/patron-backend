@@ -11,22 +11,31 @@ use db::{
 };
 use derive_more::{Display, Error, From};
 
+/// Errors that may occur during the file upload process.
 #[derive(ErrorResponse, Display, From, Error)]
 pub(super) enum UploadFileError {
+    /// Database-related error.
     DatabaseError(DbErr),
 
+    /// `multipart/form-data` request handling error.
     #[status(StatusCode::BAD_REQUEST)]
     MultipartError(MultipartError),
 
+    /// Invalid build session token was provided.
     #[status(StatusCode::FORBIDDEN)]
     #[display(fmt = "invalid token provided")]
     InvalidToken,
 
+    /// Request didn't have any file uploads in it.
     #[status(StatusCode::UNPROCESSABLE_ENTITY)]
     #[display(fmt = "no file upload was found")]
     NoFileUpload,
 }
 
+/// File upload request handler.
+///
+/// This handler is used by smart contract builders to
+/// pass source code archive contents for web UI preview.
 pub(super) async fn upload(
     State(db): State<Arc<DatabaseConnection>>,
     Path(token): Path<String>,
@@ -145,7 +154,7 @@ mod tests {
         let mut form = multipart::Form::default();
         form.add_reader("lib.rs", Cursor::new(b"Hello, world"));
 
-        let mut service = crate::app_router(Arc::new(db), Arc::new(Config::new().unwrap()));
+        let mut service = crate::app_router(Arc::new(db), Arc::new(Config::for_tests()));
 
         let response = service
             .call(
@@ -213,7 +222,7 @@ mod tests {
     async fn empty_request() {
         let db = create_database().await;
 
-        let response = crate::app_router(Arc::new(db), Arc::new(Config::new().unwrap()))
+        let response = crate::app_router(Arc::new(db), Arc::new(Config::for_tests()))
             .oneshot(
                 Request::builder()
                     .method("POST")

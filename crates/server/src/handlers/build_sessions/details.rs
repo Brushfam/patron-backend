@@ -14,15 +14,22 @@ use derive_more::{Display, Error, From};
 
 use crate::hex_hash::HexHash;
 
+/// Errors that may occur during the detail preview process.
 #[derive(ErrorResponse, Display, From, Error)]
 pub(super) enum BuildSessionDetailsError {
+    /// Database-related error.
     DatabaseError(DbErr),
 
+    /// Requested build session was not found.
     #[status(StatusCode::NOT_FOUND)]
     #[display(fmt = "build session not found")]
     BuildSessionNotFound,
 }
 
+/// Build session details handler.
+///
+/// This route is suitable to acquire the information on tooling
+/// versions used during the smart contract build process.
 pub(super) async fn details(
     Path(code_hash): Path<HexHash>,
     State(db): State<Arc<DatabaseConnection>>,
@@ -95,7 +102,7 @@ mod tests {
 
         create_test_env(&db).await;
 
-        let response = crate::app_router(Arc::new(db), Arc::new(Config::new().unwrap()))
+        let response = crate::app_router(Arc::new(db), Arc::new(Config::for_tests()))
             .oneshot(
                 Request::builder()
                     .method("GET")
@@ -119,7 +126,7 @@ mod tests {
 
         create_test_env(&db).await;
 
-        let response = crate::app_router(Arc::new(db), Arc::new(Config::new().unwrap()))
+        let response = crate::app_router(Arc::new(db), Arc::new(Config::for_tests()))
             .oneshot(
                 Request::builder()
                     .method("GET")

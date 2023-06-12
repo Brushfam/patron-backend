@@ -1,7 +1,26 @@
+//! # API server
+//! 
+//! # Proxy HTTP server
+//! 
+//! The API server will not handle TLS termination or any request body size limiting
+//! by itself, thus it has to be proxied via some other server which will handle all of that.
+//! 
+//! Request body size limiting is necessary to ensure that you don't get overwhelmed with
+//! source code archive uploads while using a self-hosted environment.
+
+/// API authentication middleware and helpers.
 mod auth;
+
+/// Route handlers.
 mod handlers;
+
+/// Hex-encoded array wrapper.
 mod hex_hash;
+
+/// Resource pagination structs.
 mod pagination;
+
+/// Validated JSON bodies.
 mod validation;
 
 #[cfg(test)]
@@ -14,6 +33,7 @@ use common::{config::Config, logging};
 use db::{Database, DatabaseConnection};
 use tracing::info;
 
+/// API server entrypoint.
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     let config = Config::new()?;
@@ -26,6 +46,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     info!("connecting to database");
     let database = Arc::new(Database::connect(&config.database.url).await?);
+    info!("database connection established");
     let server = Server::bind(&server_config.address);
     let config = Arc::new(config);
 
@@ -36,6 +57,7 @@ async fn main() -> Result<(), anyhow::Error> {
     Ok(())
 }
 
+/// Construct a [`Router`] with API server endpoints.
 fn app_router(database: Arc<DatabaseConnection>, config: Arc<Config>) -> Router {
     let mixed_routes = Router::new()
         .nest(

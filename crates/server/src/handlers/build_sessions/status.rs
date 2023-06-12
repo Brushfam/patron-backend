@@ -10,21 +10,32 @@ use db::{build_session, DatabaseConnection, DbErr, EntityTrait, QuerySelect};
 use derive_more::{Display, Error, From};
 use serde::Serialize;
 
+/// Errors that may occur during the build session status request handling.
 #[derive(ErrorResponse, Display, From, Error)]
 pub(super) enum BuildSessionStatusError {
+    /// Database-related error.
     DatabaseError(DbErr),
 
+    /// The requested build session was not found.
     #[status(StatusCode::NOT_FOUND)]
     #[display(fmt = "build session not found")]
     BuildSessionNotFound,
 }
 
+/// JSON response body.
 #[derive(Serialize)]
 pub(super) struct BuildSessionStatusResponse {
+    /// Build session status.
     status: build_session::Status,
+
+    /// Code hash, if the build session was completed successfully.
     code_hash: Option<String>,
 }
 
+/// Build session status request handler.
+///
+/// This route is used in the CLI to check if the build session completeness
+/// status.
 pub(super) async fn status(
     Path(id): Path<i64>,
     State(db): State<Arc<DatabaseConnection>>,
@@ -98,7 +109,7 @@ mod tests {
 
         let build_session_id = create_test_env(&db).await;
 
-        let response = crate::app_router(Arc::new(db), Arc::new(Config::new().unwrap()))
+        let response = crate::app_router(Arc::new(db), Arc::new(Config::for_tests()))
             .oneshot(
                 Request::builder()
                     .method("GET")
@@ -119,7 +130,7 @@ mod tests {
     async fn unknown() {
         let db = create_database().await;
 
-        let response = crate::app_router(Arc::new(db), Arc::new(Config::new().unwrap()))
+        let response = crate::app_router(Arc::new(db), Arc::new(Config::for_tests()))
             .oneshot(
                 Request::builder()
                     .method("GET")

@@ -15,20 +15,33 @@ use serde::Serialize;
 
 use crate::{auth::AuthenticatedUserId, pagination::Pagination};
 
+/// Information about a single build session.
 #[derive(Serialize)]
 pub struct BuildSessionData {
+    /// Build session identifier.
     pub id: i64,
+
+    /// Related source code identifier.
     pub source_code_id: i64,
+
+    /// Build session status.
     pub status: build_session::Status,
+
+    /// Code hash, if the build session was completed successfully.
     pub code_hash: Option<String>,
+
+    /// Build session creation time.
     pub timestamp: i64,
 }
 
+/// Errors that may occur during the list request.
 #[derive(ErrorResponse, Display, From, Error)]
 pub(super) enum BuildSessionListError {
+    /// Database-related error.
     DatabaseError(DbErr),
 }
 
+/// List build sessions related to the current authenticated user.
 pub(super) async fn list(
     Extension(current_user): Extension<AuthenticatedUserId>,
     State(db): State<Arc<DatabaseConnection>>,
@@ -158,7 +171,7 @@ mod tests {
 
         let (token, source_code_id, first_ts, second_ts) = create_test_env(&db).await;
 
-        let response = crate::app_router(Arc::new(db), Arc::new(Config::new().unwrap()))
+        let response = crate::app_router(Arc::new(db), Arc::new(Config::for_tests()))
             .oneshot(
                 Request::builder()
                     .method("GET")
