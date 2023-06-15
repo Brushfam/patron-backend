@@ -9,16 +9,17 @@ mod upload;
 
 use std::sync::Arc;
 
-use axum::{
-    routing::{get, post},
-    Router,
+use aide::axum::{
+    routing::{get_with, post_with},
+    ApiRouter,
 };
 use db::DatabaseConnection;
 
-/// Create a router that provides an API server with source code file handling routes.
-pub(crate) fn routes() -> Router<Arc<DatabaseConnection>> {
-    Router::new()
-        .route("/seal/:token", post(seal::seal))
-        .route("/upload/:token", post(upload::upload))
-        .route("/:sourceCode", get(details::details))
+/// Create an [`ApiRouter`] that provides an API server with source code file handling routes.
+pub(crate) fn routes() -> ApiRouter<Arc<DatabaseConnection>> {
+    ApiRouter::new()
+        .api_route("/seal/:token", post_with(seal::seal, seal::docs))
+        .api_route("/upload/:token", post_with(upload::upload, upload::docs))
+        .api_route("/:sourceCode", get_with(details::details, details::docs))
+        .with_path_items(|op| op.tag("File uploads"))
 }

@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use aide::{transform::TransformOperation, OperationIo};
 use axum::{extract::State, Extension, Json};
 use axum_derive_error::ErrorResponse;
 use db::{
@@ -7,23 +8,36 @@ use db::{
     TransactionErrorExt, TransactionTrait,
 };
 use derive_more::{Display, Error, From};
+use schemars::JsonSchema;
 use serde::Deserialize;
 use sp_core::sr25519::Public;
 
 use crate::auth::AuthenticatedUserId;
 
 /// Errors that may occur during the public key deletion request handling.
-#[derive(ErrorResponse, Display, From, Error)]
+#[derive(ErrorResponse, Display, From, Error, OperationIo)]
+#[aide(output)]
 pub(super) enum PublicKeyDeletionError {
     /// Database-related error.
     DatabaseError(DbErr),
 }
 
 /// JSON request body.
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 pub(super) struct PublicKeyDeletionRequest {
     /// Public key that has to be deleted.
+    #[schemars(example = "crate::schema::example_public_key", with = "String")]
     account: Public,
+}
+
+/// Generate OAPI documentation for the [`delete`] handler.
+pub(super) fn docs(op: TransformOperation) -> TransformOperation {
+    op.summary("Delete public key attached to the current user.")
+        .description(
+            r#"This route does not return information
+on whether the provided public key was attached to the current user or not."#,
+        )
+        .response::<200, ()>()
 }
 
 /// Delete public key attached to the current authenticated user's account.

@@ -7,6 +7,9 @@ pub(crate) mod build_sessions;
 /// Smart contract management routes.
 pub(crate) mod contracts;
 
+/// OAPI documentation.
+pub(crate) mod docs;
+
 /// Source code file browsing and uploading routes.
 pub(crate) mod files;
 

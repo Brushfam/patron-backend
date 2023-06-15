@@ -1,3 +1,4 @@
+use aide::OperationInput;
 use axum::{
     async_trait,
     extract::{rejection::JsonRejection, FromRequest},
@@ -27,6 +28,22 @@ pub enum ValidatedJsonRejection {
 ///
 /// [`JSON`]: axum::extract::Json
 pub struct ValidatedJson<T>(pub T);
+
+impl<T> OperationInput for ValidatedJson<T>
+where
+    Json<T>: OperationInput,
+{
+    fn operation_input(ctx: &mut aide::gen::GenContext, operation: &mut aide::openapi::Operation) {
+        <Json<T> as OperationInput>::operation_input(ctx, operation)
+    }
+
+    fn inferred_early_responses(
+        ctx: &mut aide::gen::GenContext,
+        operation: &mut aide::openapi::Operation,
+    ) -> Vec<(Option<u16>, aide::openapi::Response)> {
+        <Json<T> as OperationInput>::inferred_early_responses(ctx, operation)
+    }
+}
 
 #[async_trait]
 impl<T, S, B> FromRequest<S, B> for ValidatedJson<T>

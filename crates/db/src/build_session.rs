@@ -7,6 +7,7 @@
 //! Rust and `cargo-contract` tooling versions, and, as soon as the build is successful,
 //! WASM code hash and JSON metadata.
 
+use schemars::JsonSchema;
 use sea_orm::{entity::prelude::*, FromQueryResult};
 use serde::Serialize;
 
@@ -46,7 +47,7 @@ pub struct Model {
 }
 
 /// Build session status.
-#[derive(Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, JsonSchema)]
 #[sea_orm(rs_type = "i16", db_type = "Integer")]
 #[serde(rename_all = "snake_case")]
 pub enum Status {
@@ -119,12 +120,4 @@ pub struct ProcessedBuildSession {
     pub source_code_id: i64,
     pub rustc_version: String,
     pub cargo_contract_version: String,
-}
-
-/// Build session info used to provide details to users.
-#[derive(Serialize, FromQueryResult)]
-pub struct BuildSessionInfo {
-    pub source_code_id: i64,
-    pub cargo_contract_version: String,
-    pub rustc_version: String,
 }

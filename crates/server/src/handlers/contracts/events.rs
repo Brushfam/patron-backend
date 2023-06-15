@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use aide::{transform::TransformOperation, OperationIo};
 use axum::{
     extract::{Path, State},
     Json,
@@ -11,37 +12,53 @@ use db::{
 };
 use derive_more::{Display, Error, From};
 use futures_util::TryStreamExt;
+use schemars::JsonSchema;
 use serde::Serialize;
-use sp_core::{crypto::AccountId32, ByteArray};
+use sp_core::ByteArray;
+
+use super::WrappedAccountId32;
 
 /// Errors that may occur during the contract event list request handling.
-#[derive(ErrorResponse, Display, From, Error)]
+#[derive(ErrorResponse, Display, From, Error, OperationIo)]
+#[aide(output)]
 pub(super) enum ContractEventsError {
     /// Database-related error.
     DatabaseError(DbErr),
 }
 
 /// A single contract event.
-#[derive(Serialize)]
+#[derive(Serialize, JsonSchema)]
 pub struct ContractEvent {
     /// Serialized JSON body of a contract event.
-    ///
-    /// See [`db::event::EventBody`] for more information.
+    #[schemars(example = "crate::schema::example_event_body")]
     body: String,
 
     /// Timestamp of a block in which the event was discovered.
+    #[schemars(example = "crate::schema::example_timestamp")]
     timestamp: i64,
+}
+
+/// Generate OAPI documentation for the [`events`] handler.
+pub(super) fn docs(op: TransformOperation) -> TransformOperation {
+    op.summary("Get events related to the contract account.")
+        .description(
+            r#"Smart contract events are discovered
+only after the initial activation of an event client."#,
+        )
+        .response_with::<200, Json<Vec<ContractEvent>>, _>(|op| {
+            op.description("Event list response.")
+        })
 }
 
 /// Contract event list request handler.
 pub(super) async fn events(
-    Path(account): Path<AccountId32>,
+    Path(account): Path<WrappedAccountId32>,
     State(db): State<Arc<DatabaseConnection>>,
 ) -> Result<Json<Vec<ContractEvent>>, ContractEventsError> {
     let model = event::Entity::find()
         .select_only()
         .columns([event::Column::Body, event::Column::BlockTimestamp])
-        .filter(event::Column::Account.eq(account.as_slice()))
+        .filter(event::Column::Account.eq(account.0.as_slice()))
         .order_by_desc(event::Column::BlockTimestamp)
         .limit(25)
         .into_tuple::<(String, PrimitiveDateTime)>()

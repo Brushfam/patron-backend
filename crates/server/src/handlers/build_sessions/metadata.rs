@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use aide::{transform::TransformOperation, OperationIo};
 use axum::{
     extract::{Path, State},
     http::StatusCode,
@@ -11,17 +12,18 @@ use db::{
     QuerySelect,
 };
 use derive_more::{Display, Error, From};
+use serde_json::Value;
 
-use crate::hex_hash::HexHash;
+use crate::{hex_hash::HexHash, schema::example_error};
 
 /// Errors that may occur during the contract metadata request.
-#[derive(ErrorResponse, Display, From, Error)]
+#[derive(ErrorResponse, Display, From, Error, OperationIo)]
+#[aide(output)]
 pub(super) enum BuildSessionMetadataError {
     /// Database-related error.
     DatabaseError(DbErr),
 
     /// Unable to parse the metadata stored inside of a database as a JSON value.
-    #[status(StatusCode::BAD_REQUEST)]
     #[display(fmt = "invalid metadata")]
     InvalidMetadata,
 
@@ -29,6 +31,21 @@ pub(super) enum BuildSessionMetadataError {
     #[status(StatusCode::NOT_FOUND)]
     #[display(fmt = "build session not found")]
     BuildSessionNotFound,
+}
+
+/// Generate OAPI documentation for the [`metadata`] handler.
+pub(super) fn docs(op: TransformOperation) -> TransformOperation {
+    op.summary("Get JSON metadata of the latest build session.")
+        .response_with::<200, Json<Value>, _>(|op| {
+            op.description("JSON metadata response.")
+                .example(Value::Object(Default::default()))
+        })
+        .response_with::<404, Json<Value>, _>(|op| {
+            op.description("No build sessions with the provided code hash were found.")
+                .example(example_error(
+                    BuildSessionMetadataError::BuildSessionNotFound,
+                ))
+        })
 }
 
 /// Contract metadata request handler.

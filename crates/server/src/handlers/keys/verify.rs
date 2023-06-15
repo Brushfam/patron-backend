@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use aide::{transform::TransformOperation, OperationIo};
 use axum::{extract::State, http::StatusCode, Extension, Json};
 use axum_derive_error::ErrorResponse;
 use db::{
@@ -7,16 +8,19 @@ use db::{
     QueryFilter, QuerySelect, SelectExt, TransactionErrorExt, TransactionTrait,
 };
 use derive_more::{Display, Error, From};
+use schemars::JsonSchema;
 use serde::Deserialize;
+use serde_json::Value;
 use sp_core::{
     sr25519::{Pair, Public, Signature},
     Pair as _,
 };
 
-use crate::auth::AuthenticatedUserId;
+use crate::{auth::AuthenticatedUserId, schema::example_error};
 
 /// Errors that may occur during the public key verification process.
-#[derive(ErrorResponse, Display, From, Error)]
+#[derive(ErrorResponse, Display, From, Error, OperationIo)]
+#[aide(output)]
 pub(super) enum PublicKeyVerificationError {
     /// Database-related error.
     DatabaseError(DbErr),
@@ -33,9 +37,10 @@ pub(super) enum PublicKeyVerificationError {
 }
 
 /// JSON request body.
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 pub(super) struct PublicKeyVerificationRequest {
     /// Public key text value.
+    #[schemars(example = "crate::schema::example_public_key", with = "String")]
     account: Public,
 
     /// Signed verification message.
@@ -45,7 +50,22 @@ pub(super) struct PublicKeyVerificationRequest {
     /// used for verification purposes.
     ///
     /// Example: `<Bytes>5FeLhJAs4CUHqpWmPDBLeL7NLAoHsB2ZuFZ5Mk62EgYemtFj</Bytes>`
+    #[schemars(example = "crate::schema::example_signature", with = "String")]
     signature: Signature,
+}
+
+/// Generate OAPI documentation for the [`docs`] handler.
+pub(super) fn docs(op: TransformOperation) -> TransformOperation {
+    op.summary("Verify a new public key.")
+        .response::<200, ()>()
+        .response_with::<403, Json<Value>, _>(|op| {
+            op.description("The provided public key is already attached.")
+                .example(example_error(PublicKeyVerificationError::AccountExists))
+        })
+        .response_with::<422, Json<Value>, _>(|op| {
+            op.description("An invalid signature was provided.")
+                .example(example_error(PublicKeyVerificationError::InvalidSignature))
+        })
 }
 
 /// Verify a public key and attach it to the current authenticated user's account on success.

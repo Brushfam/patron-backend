@@ -24,9 +24,10 @@ use std::error::Error;
 
 use async_trait::async_trait;
 pub use sea_orm::{
-    sea_query, ActiveModelTrait, ActiveValue, ColumnTrait, ConnectionTrait, Database,
-    DatabaseConnection, DatabaseTransaction, DbErr, EntityTrait, QueryFilter, QueryOrder,
-    QuerySelect, QueryTrait, StatementBuilder, TransactionError, TransactionTrait, TryGetableMany,
+    self, sea_query, ActiveModelTrait, ActiveValue, ColumnTrait, ConnectionTrait, Database,
+    DatabaseConnection, DatabaseTransaction, DbErr, EntityTrait, FromQueryResult, QueryFilter,
+    QueryOrder, QuerySelect, QueryTrait, StatementBuilder, TransactionError, TransactionTrait,
+    TryGetableMany,
 };
 pub use time::{OffsetDateTime, PrimitiveDateTime};
 

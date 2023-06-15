@@ -1,5 +1,6 @@
-use std::sync::Arc;
+use std::{array::TryFromSliceError, sync::Arc};
 
+use aide::{transform::TransformOperation, OperationIo};
 use axum::{
     extract::{Path, State},
     http::StatusCode,
@@ -8,13 +9,21 @@ use axum::{
 use axum_derive_error::ErrorResponse;
 use db::{build_session, DatabaseConnection, DbErr, EntityTrait, QuerySelect};
 use derive_more::{Display, Error, From};
+use schemars::JsonSchema;
 use serde::Serialize;
+use serde_json::Value;
+
+use crate::{hex_hash::HexHash, schema::example_error};
 
 /// Errors that may occur during the build session status request handling.
-#[derive(ErrorResponse, Display, From, Error)]
+#[derive(ErrorResponse, Display, From, Error, OperationIo)]
+#[aide(output)]
 pub(super) enum BuildSessionStatusError {
     /// Database-related error.
     DatabaseError(DbErr),
+
+    /// Incorrect hash size stored inside of a database
+    IncorrectArchiveHash(TryFromSliceError),
 
     /// The requested build session was not found.
     #[status(StatusCode::NOT_FOUND)]
@@ -23,13 +32,25 @@ pub(super) enum BuildSessionStatusError {
 }
 
 /// JSON response body.
-#[derive(Serialize)]
+#[derive(Serialize, JsonSchema)]
 pub(super) struct BuildSessionStatusResponse {
     /// Build session status.
+    #[schemars(example = "crate::schema::example_build_session_status")]
     status: build_session::Status,
 
     /// Code hash, if the build session was completed successfully.
-    code_hash: Option<String>,
+    #[schemars(example = "crate::schema::example_hex_hash")]
+    code_hash: Option<HexHash>,
+}
+
+/// Generate OAPI documentation for the [`status`] handler.
+pub(super) fn docs(op: TransformOperation) -> TransformOperation {
+    op.summary("Get build session status.")
+        .response::<200, Json<BuildSessionStatusResponse>>()
+        .response_with::<404, Json<Value>, _>(|op| {
+            op.description("No build sessions with the provided identifier were found.")
+                .example(example_error(BuildSessionStatusError::BuildSessionNotFound))
+        })
 }
 
 /// Build session status request handler.
@@ -53,7 +74,7 @@ pub(super) async fn status(
 
     Ok(Json(BuildSessionStatusResponse {
         status,
-        code_hash: code_hash.map(hex::encode),
+        code_hash: code_hash.as_deref().map(HexHash::try_from).transpose()?,
     }))
 }
 

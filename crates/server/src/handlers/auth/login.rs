@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use aide::{transform::TransformOperation, OperationIo};
 use axum::{
     extract::{Query, State},
     http::StatusCode,
@@ -12,14 +13,19 @@ use db::{
     TransactionTrait,
 };
 use derive_more::{Display, Error, From};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use sp_core::{
     sr25519::{Pair, Public, Signature},
     Pair as _,
 };
 
+use crate::schema::example_error;
+
 /// Errors that may occur during the authentication process.
-#[derive(ErrorResponse, Display, From, Error)]
+#[derive(ErrorResponse, Display, From, Error, OperationIo)]
+#[aide(output)]
 pub(super) enum UserAuthenticationError {
     /// Database-related error.
     DatabaseError(DbErr),
@@ -37,27 +43,40 @@ pub(super) enum UserAuthenticationError {
 }
 
 /// Query string deserialization struct for an optional CLI token.
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 pub(super) struct UserAuthenticationQuery {
     /// User-generated CLI token.
     #[serde(default)]
+    #[schemars(example = "crate::schema::example_token")]
     cli_token: Option<String>,
 }
 
-/// JSON request body.
-#[derive(Deserialize)]
+/// Authentication request.
+#[derive(Deserialize, JsonSchema)]
 pub(super) struct UserAuthenticationRequest {
+    /// Public key used to authenticate.
+    #[schemars(example = "crate::schema::example_public_key", with = "String")]
     account: Public,
+
+    /// Message signed with the provided public key for verification.
+    ///
+    /// Verification message consists of
+    /// a string equal to the account address
+    /// used for verification purposes.
+    ///
+    /// Example: `<Bytes>5FeLhJAs4CUHqpWmPDBLeL7NLAoHsB2ZuFZ5Mk62EgYemtFj</Bytes>`
+    #[schemars(example = "crate::schema::example_signature", with = "String")]
     signature: Signature,
 }
 
-/// JSON response body.
-#[derive(Serialize)]
+/// Conditional successful token exchange.
+#[derive(Serialize, JsonSchema)]
 #[serde(untagged)]
 pub(super) enum UserAuthenticationResponse {
     /// Web UI authentication flow.
     Web {
         /// Authentication token.
+        #[schemars(example = "crate::schema::example_token")]
         token: String,
     },
 
@@ -67,6 +86,30 @@ pub(super) enum UserAuthenticationResponse {
     /// as the CLI has to request it in a separate
     /// query to the `exchange` route.
     Cli,
+}
+
+/// Generate OAPI documentation for the [`login`] handler.
+pub(super) fn docs(op: TransformOperation) -> TransformOperation {
+    op.summary("Create new authentication token.")
+        .description(
+            r#"Use provided credentials to authenticate user and create
+a new authentication token.
+
+Provided credentials are validated to ensure that the provided signature
+belongs to the provided public key.
+
+This route returns different responses depending on the flow you want to use.
+Regular authentication flow returns an authentication token from this route
+as soon as the signature validation is successful. CLI authentication flow
+does not return anything from this route, relying on client calling an `/auth/exchange` route.
+To proceed with the CLI authentication flow, pass `cli_token` value as specified
+in the query string documentation."#,
+        )
+        .response::<200, Json<UserAuthenticationResponse>>()
+        .response_with::<422, Json<Value>, _>(|op| {
+            op.description("The provided signature is invalid.")
+                .example(example_error(UserAuthenticationError::InvalidSignature))
+        })
 }
 
 /// User authentication handler.

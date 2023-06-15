@@ -24,7 +24,8 @@ mod wasm;
 
 use std::sync::Arc;
 
-use axum::{middleware::from_fn_with_state, routing::get, Router};
+use aide::axum::{routing::get_with, ApiRouter};
+use axum::middleware::from_fn_with_state;
 use common::config::Config;
 use db::DatabaseConnection;
 
@@ -35,21 +36,37 @@ use crate::auth;
 pub(crate) fn routes(
     database: Arc<DatabaseConnection>,
     config: Arc<Config>,
-) -> Router<Arc<DatabaseConnection>> {
-    let public_routes = Router::new()
-        .route("/latest/:archiveHash", get(latest::latest))
-        .route("/metadata/:codeHash", get(metadata::metadata))
-        .route("/wasm/:codeHash", get(wasm::wasm))
-        .route("/details/:codeHash", get(details::details))
-        .route("/status/:id", get(status::status))
-        .route("/logs/:id", get(logs::logs));
+) -> ApiRouter<Arc<DatabaseConnection>> {
+    let public_routes = ApiRouter::new()
+        .api_route(
+            "/latest/:archiveHash",
+            get_with(latest::latest, latest::docs),
+        )
+        .api_route(
+            "/metadata/:codeHash",
+            get_with(metadata::metadata, metadata::docs),
+        )
+        .api_route("/wasm/:codeHash", get_with(wasm::wasm, wasm::docs))
+        .api_route(
+            "/details/:codeHash",
+            get_with(details::details, details::docs),
+        )
+        .api_route("/status/:id", get_with(status::status, status::docs))
+        .api_route("/logs/:id", get_with(logs::logs, logs::docs));
 
-    let private_routes = Router::new()
-        .route("/", get(list::list).post(create::create))
+    let private_routes = ApiRouter::new()
+        .api_route(
+            "/",
+            get_with(list::list, list::docs).post_with(create::create, create::docs),
+        )
         .route_layer(from_fn_with_state(
             (database, config),
             auth::require_authentication::<true, true, _>,
-        ));
+        ))
+        .with_path_items(|op| op.security_requirement("Authentication token"));
 
-    Router::new().merge(private_routes).merge(public_routes)
+    ApiRouter::new()
+        .merge(private_routes)
+        .merge(public_routes)
+        .with_path_items(|op| op.tag("Build session management"))
 }

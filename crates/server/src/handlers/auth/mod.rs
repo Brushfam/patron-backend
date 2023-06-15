@@ -9,13 +9,14 @@ mod register;
 
 use std::sync::Arc;
 
-use axum::{routing::post, Router};
+use aide::axum::{routing::post_with, ApiRouter};
 use db::DatabaseConnection;
 
-/// Create a router that provides an API server with authentication routes.
-pub(crate) fn routes() -> Router<Arc<DatabaseConnection>> {
-    Router::new()
-        .route("/login", post(login::login))
-        .route("/register", post(register::register))
-        .route("/exchange", post(exchange::exchange))
+/// Create an [`ApiRouter`] that provides an API server with authentication routes.
+pub(crate) fn routes() -> ApiRouter<Arc<DatabaseConnection>> {
+    ApiRouter::new()
+        .api_route("/login", post_with(login::login, login::docs))
+        .api_route("/register", post_with(register::register, register::docs))
+        .api_route("/exchange", post_with(exchange::exchange, exchange::docs))
+        .with_path_items(|op| op.tag("Authentication"))
 }

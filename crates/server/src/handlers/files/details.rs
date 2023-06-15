@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use aide::{transform::TransformOperation, OperationIo};
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
@@ -8,34 +9,47 @@ use axum::{
 use axum_derive_error::ErrorResponse;
 use db::{file, ColumnTrait, DatabaseConnection, DbErr, EntityTrait, QueryFilter, QuerySelect};
 use derive_more::{Display, Error, From};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
+
+use crate::schema::example_error;
 
 /// Max count of files that can be fetched from the database.
 const MAX_FILES: u64 = 1000;
 
 /// Query string that contains an optional file path to fetch.
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 pub(super) struct DetailsQuery {
     /// File path.
     ///
-    /// If [`None`], a list of file names will be returned instead.
+    /// If `null`, a list of file names will be returned instead.
     #[serde(default)]
+    #[schemars(example = "crate::schema::example_file")]
     file: Option<String>,
 }
 
-/// JSON response body.
-#[derive(Serialize)]
+/// Source code file details response.
+#[derive(Serialize, JsonSchema)]
 #[serde(untagged)]
 pub(super) enum DetailsResponse {
-    /// Contents of a single file.
-    File { text: String },
+    /// Single-file contents request.
+    File {
+        /// Contents of a single file.
+        text: String,
+    },
 
-    /// List of related file names.
-    List { files: Vec<String> },
+    /// List of files request.
+    List {
+        /// List of related file names.
+        #[schemars(example = "crate::schema::example_files")]
+        files: Vec<String>,
+    },
 }
 
 /// Errors that may occur during the file details request handling.
-#[derive(ErrorResponse, Display, From, Error)]
+#[derive(ErrorResponse, Display, From, Error, OperationIo)]
+#[aide(output)]
 pub(super) enum DetailsError {
     /// Database-related error.
     DatabaseError(DbErr),
@@ -44,6 +58,20 @@ pub(super) enum DetailsError {
     #[status(StatusCode::NOT_FOUND)]
     #[display(fmt = "file not found")]
     FileNotFound,
+}
+
+/// Generate OAPI documentation for the [`details`] handler.
+pub(super) fn docs(op: TransformOperation) -> TransformOperation {
+    op.summary("Retrieve source code archive file details.")
+        .description(
+            r#"This route conditionally returns either a single file contents
+or a list of files contained within a provided source code archive."#,
+        )
+        .response::<200, Json<DetailsResponse>>()
+        .response_with::<404, Json<Value>, _>(|op| {
+            op.description("File not found.")
+                .example(example_error(DetailsError::FileNotFound))
+        })
 }
 
 /// File details request handler.

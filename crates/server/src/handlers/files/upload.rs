@@ -1,8 +1,10 @@
 use std::sync::Arc;
 
+use aide::{transform::TransformOperation, OperationIo};
 use axum::{
     extract::{multipart::MultipartError, Multipart, Path, State},
     http::StatusCode,
+    Json,
 };
 use axum_derive_error::ErrorResponse;
 use db::{
@@ -10,9 +12,13 @@ use db::{
     DbErr, EntityTrait, QueryFilter, QuerySelect, TransactionErrorExt, TransactionTrait,
 };
 use derive_more::{Display, Error, From};
+use serde_json::Value;
+
+use crate::schema::example_error;
 
 /// Errors that may occur during the file upload process.
-#[derive(ErrorResponse, Display, From, Error)]
+#[derive(ErrorResponse, Display, From, Error, OperationIo)]
+#[aide(output)]
 pub(super) enum UploadFileError {
     /// Database-related error.
     DatabaseError(DbErr),
@@ -30,6 +36,23 @@ pub(super) enum UploadFileError {
     #[status(StatusCode::UNPROCESSABLE_ENTITY)]
     #[display(fmt = "no file upload was found")]
     NoFileUpload,
+}
+
+/// Generate OAPI documentation for the [`upload`] handler.
+pub(super) fn docs(op: TransformOperation) -> TransformOperation {
+    op.summary("Upload new file with the provided build session token.")
+        .response::<200, ()>()
+        .response_with::<400, Json<Value>, _>(|op| {
+            op.description("Incorrect multipart/form-data request.")
+        })
+        .response_with::<403, Json<Value>, _>(|op| {
+            op.description("Invalid build session token was provided.")
+                .example(example_error(UploadFileError::InvalidToken))
+        })
+        .response_with::<422, Json<Value>, _>(|op| {
+            op.description("No file upload was found in the request.")
+                .example(example_error(UploadFileError::NoFileUpload))
+        })
 }
 
 /// File upload request handler.

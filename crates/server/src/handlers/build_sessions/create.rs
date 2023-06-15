@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use aide::{transform::TransformOperation, OperationIo};
 use axum::{extract::State, http::StatusCode, Extension, Json};
 use axum_derive_error::ErrorResponse;
 use db::{
@@ -9,10 +10,12 @@ use db::{
 use derive_more::{Display, Error, From};
 use once_cell::sync::Lazy;
 use regex::Regex;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use validator::Validate;
 
-use crate::{auth::AuthenticatedUserId, validation::ValidatedJson};
+use crate::{auth::AuthenticatedUserId, schema::example_error, validation::ValidatedJson};
 
 /// Regular expression to match stable versions of Rust toolchain and `cargo-contract`.
 ///
@@ -22,7 +25,8 @@ static VERSION_REGEX: Lazy<Regex> = Lazy::new(|| {
 });
 
 /// Errors that may occur during the build session creation process.
-#[derive(ErrorResponse, Display, From, Error)]
+#[derive(ErrorResponse, Display, From, Error, OperationIo)]
+#[aide(output)]
 pub(super) enum BuildSessionCreateError {
     /// Database-related error.
     DatabaseError(DbErr),
@@ -39,25 +43,39 @@ pub(super) enum BuildSessionCreateError {
 }
 
 /// JSON request body.
-#[derive(Deserialize, Validate)]
+#[derive(Deserialize, Validate, JsonSchema)]
 pub(super) struct BuildSessionCreateRequest {
     /// Source code identifier.
+    #[schemars(example = "crate::schema::example_database_identifier")]
     source_code_id: i64,
 
     /// `cargo-contract` tooling version.
     #[validate(regex = "VERSION_REGEX")]
+    #[schemars(example = "crate::schema::example_cargo_contract_version")]
     cargo_contract_version: String,
 
     /// Rust tooling version.
     #[validate(regex = "VERSION_REGEX")]
+    #[schemars(example = "crate::schema::example_rustc_version")]
     rustc_version: String,
 }
 
 /// JSON response body.
-#[derive(Serialize)]
+#[derive(Serialize, JsonSchema)]
 pub(super) struct BuildSessionCreateResponse {
     /// Build session identifier.
+    #[schemars(example = "crate::schema::example_database_identifier")]
     id: i64,
+}
+
+/// Generate OAPI documentation for the [`create`] handler.
+pub(super) fn docs(op: TransformOperation) -> TransformOperation {
+    op.summary("Create new build session.")
+        .response::<200, Json<BuildSessionCreateResponse>>()
+        .response_with::<404, Json<Value>, _>(|op| {
+            op.description("Provided source code identifier is incorrect.")
+                .example(example_error(BuildSessionCreateError::SourceCodeNotFound))
+        })
 }
 
 /// Build session creation handler.

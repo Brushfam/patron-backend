@@ -1,5 +1,6 @@
-use std::sync::Arc;
+use std::{array::TryFromSliceError, sync::Arc};
 
+use aide::{transform::TransformOperation, OperationIo};
 use axum::{
     extract::{Query, State},
     Extension, Json,
@@ -11,34 +12,52 @@ use db::{
 };
 use derive_more::{Display, Error, From};
 use futures_util::TryStreamExt;
+use schemars::JsonSchema;
 use serde::Serialize;
 
-use crate::{auth::AuthenticatedUserId, pagination::Pagination};
+use crate::{auth::AuthenticatedUserId, hex_hash::HexHash, pagination::Pagination};
 
 /// Information about a single build session.
-#[derive(Serialize)]
+#[derive(Serialize, JsonSchema)]
 pub struct BuildSessionData {
     /// Build session identifier.
+    #[schemars(example = "crate::schema::example_database_identifier")]
     pub id: i64,
 
     /// Related source code identifier.
+    #[schemars(example = "crate::schema::example_database_identifier")]
     pub source_code_id: i64,
 
     /// Build session status.
+    #[schemars(example = "crate::schema::example_build_session_status")]
     pub status: build_session::Status,
 
     /// Code hash, if the build session was completed successfully.
-    pub code_hash: Option<String>,
+    #[schemars(example = "crate::schema::example_hex_hash")]
+    pub code_hash: Option<HexHash>,
 
     /// Build session creation time.
+    #[schemars(example = "crate::schema::example_timestamp")]
     pub timestamp: i64,
 }
 
 /// Errors that may occur during the list request.
-#[derive(ErrorResponse, Display, From, Error)]
+#[derive(ErrorResponse, Display, From, Error, OperationIo)]
+#[aide(output)]
 pub(super) enum BuildSessionListError {
     /// Database-related error.
     DatabaseError(DbErr),
+
+    /// Incorrect hash size stored inside of a database
+    IncorrectArchiveHash(TryFromSliceError),
+}
+
+/// Generate OAPI documentation for the [`list`] handler.
+pub(super) fn docs(op: TransformOperation) -> TransformOperation {
+    op.summary("Get list of build sessions of the current user.")
+        .response_with::<200, Json<Vec<BuildSessionData>>, _>(|op| {
+            op.description("Build session list response.")
+        })
 }
 
 /// List build sessions related to the current authenticated user.
@@ -76,7 +95,7 @@ pub(super) async fn list(
                     id,
                     source_code_id,
                     status,
-                    code_hash: code_hash.map(hex::encode),
+                    code_hash: code_hash.as_deref().map(HexHash::try_from).transpose()?,
                     timestamp: timestamp.assume_utc().unix_timestamp(),
                 })
             },

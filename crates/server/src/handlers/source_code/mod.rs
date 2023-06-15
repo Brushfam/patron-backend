@@ -6,7 +6,8 @@ mod upload;
 
 use std::sync::Arc;
 
-use axum::{middleware::from_fn_with_state, routing::get, Router};
+use aide::axum::{routing::get_with, ApiRouter};
+use axum::middleware::from_fn_with_state;
 use common::config::Config;
 use db::DatabaseConnection;
 
@@ -16,11 +17,18 @@ use crate::auth;
 pub(crate) fn routes(
     database: Arc<DatabaseConnection>,
     config: Arc<Config>,
-) -> Router<Arc<DatabaseConnection>> {
-    Router::new()
-        .route("/", get(list::list).post(upload::upload))
+) -> ApiRouter<Arc<DatabaseConnection>> {
+    ApiRouter::new()
+        .api_route(
+            "/",
+            get_with(list::list, list::docs).post_with(upload::upload, upload::docs),
+        )
         .route_layer(from_fn_with_state(
             (database, config),
             auth::require_authentication::<true, true, _>,
         ))
+        .with_path_items(|op| {
+            op.security_requirement("Authentication token")
+                .tag("Source code management")
+        })
 }

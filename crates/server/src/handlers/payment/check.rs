@@ -1,5 +1,6 @@
 use std::{array::TryFromSliceError, fmt, str::FromStr, sync::Arc};
 
+use aide::{transform::TransformOperation, OperationIo};
 use axum::{extract::State, http::StatusCode, Extension, Json};
 use axum_derive_error::ErrorResponse;
 use common::{
@@ -16,23 +17,28 @@ use db::{
 };
 use derive_more::{Display, Error, From};
 use ink_metadata::LangError;
+use schemars::JsonSchema;
 use serde::Deserialize;
+use serde_json::Value;
 use sp_core::crypto::AccountId32;
 
-use crate::auth::AuthenticatedUserId;
+use crate::{auth::AuthenticatedUserId, schema::example_error};
 
 /// JSON request body.
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 pub(super) struct PaymentCheckRequest {
     /// Node identifier used to check the membership payment.
+    #[schemars(example = "crate::schema::example_database_identifier")]
     node_id: i64,
 
     /// Account identifier against which the check will be executed.
+    #[schemars(example = "crate::schema::example_account", with = "String")]
     account: AccountId32,
 }
 
 /// Errors that may occur during the membership check process.
-#[derive(ErrorResponse, Display, From, Error)]
+#[derive(ErrorResponse, Display, From, Error, OperationIo)]
+#[aide(output)]
 pub(super) enum PaymentCheckError {
     /// Database-related error.
     DatabaseError(DbErr),
@@ -98,6 +104,21 @@ impl fmt::Display for WrappedDispatchError {
 }
 
 impl std::error::Error for WrappedDispatchError {}
+
+/// Generate OAPI documentation for the [`check`] handler.
+pub(super) fn docs(op: TransformOperation) -> TransformOperation {
+    op.summary("Check membership payment with the provided node.")
+        .description("See self-hosted documentation for more information about the contract ABI.")
+        .response::<200, ()>()
+        .response_with::<400, Json<Value>, _>(|op| {
+            op.description("Invalid account identifier was provided.")
+                .example(example_error(PaymentCheckError::InvalidKey))
+        })
+        .response_with::<404, Json<Value>, _>(|op| {
+            op.description("The provided node identifier is invalid.")
+                .example(example_error(PaymentCheckError::InvalidNodeId))
+        })
+}
 
 /// Check current authenticated user's membership.
 ///

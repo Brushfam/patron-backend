@@ -6,12 +6,22 @@ mod events;
 
 use std::sync::Arc;
 
-use axum::{routing::get, Router};
+use aide::axum::{routing::get_with, ApiRouter};
 use db::DatabaseConnection;
+use schemars::JsonSchema;
+use serde::Deserialize;
+use sp_core::crypto::AccountId32;
 
-/// Create a router that provides an API server with contract information routes.
-pub(crate) fn routes() -> Router<Arc<DatabaseConnection>> {
-    Router::new()
-        .route("/events/:account", get(events::events))
-        .route("/:account", get(details::details))
+#[derive(Deserialize, JsonSchema)]
+#[serde(transparent)]
+struct WrappedAccountId32(
+    #[schemars(example = "crate::schema::example_account", with = "String")] pub AccountId32,
+);
+
+/// Create an [`ApiRouter`] that provides an API server with contract information routes.
+pub(crate) fn routes() -> ApiRouter<Arc<DatabaseConnection>> {
+    ApiRouter::new()
+        .api_route("/events/:account", get_with(events::events, events::docs))
+        .api_route("/:account", get_with(details::details, details::docs))
+        .with_path_items(|op| op.tag("Contract management"))
 }

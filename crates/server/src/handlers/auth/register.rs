@@ -1,25 +1,41 @@
 use std::sync::Arc;
 
+use aide::{transform::TransformOperation, OperationIo};
 use axum::{extract::State, Json};
 use axum_derive_error::ErrorResponse;
 use db::{
     token, user, DatabaseConnection, DbErr, EntityTrait, TransactionErrorExt, TransactionTrait,
 };
 use derive_more::{Display, Error, From};
+use schemars::JsonSchema;
 use serde::Serialize;
 
 /// Errors that may occur during the user registration process.
-#[derive(ErrorResponse, Display, From, Error)]
+#[derive(ErrorResponse, Display, From, Error, OperationIo)]
+#[aide(output)]
 pub(super) enum UserRegistrationError {
     /// Database-related error.
     DatabaseError(DbErr),
 }
 
-/// JSON response body.
-#[derive(Serialize)]
+/// Registered user's authentication token response.
+#[derive(Serialize, JsonSchema)]
 pub(super) struct UserRegistrationResponse {
     /// Authentication token.
+    #[schemars(example = "crate::schema::example_token")]
     token: String,
+}
+
+/// Generate OAPI documentation for the [`register`] handler.
+pub(super) fn docs(op: TransformOperation) -> TransformOperation {
+    op.summary("Register new user.")
+        .description(
+            r#"This route does not request any data from a client,
+thus registering user immediately. Be aware, that a newly registered user does not
+have any public keys attached to their account, meaning that you have to attach one
+as soon as possible to ensure that a user account does not get lost."#,
+        )
+        .response::<200, Json<UserRegistrationResponse>>()
 }
 
 /// User registration handler.

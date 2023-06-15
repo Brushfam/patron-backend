@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use aide::{transform::TransformOperation, OperationIo};
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
@@ -12,12 +13,15 @@ use db::{
 };
 use derive_more::{Display, Error, From};
 use futures_util::TryStreamExt;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
-use crate::hex_hash::HexHash;
+use crate::{hex_hash::HexHash, schema::example_error};
 
 /// Errors that may occur during the log list request.
-#[derive(ErrorResponse, Display, From, Error)]
+#[derive(ErrorResponse, Display, From, Error, OperationIo)]
+#[aide(output)]
 pub(super) enum BuildSessionLogsError {
     /// Database-related error.
     DatabaseError(DbErr),
@@ -29,36 +33,61 @@ pub(super) enum BuildSessionLogsError {
 
     /// Provided identifier does not have any related resource.
     #[status(StatusCode::NOT_FOUND)]
-    #[display(fmt = "code not found")]
-    NotFound,
+    #[display(fmt = "build session not found")]
+    BuildSessionNotFound,
 }
 
 /// Query string that can be used to offset a log list.
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 pub(super) struct BuildSessionLogsQuery {
     /// Current log position.
     ///
-    /// If [`Some`], only those log entries with
+    /// If provided, only those log entries with
     /// identifiers greater than the value provided in this
     /// field will be returned.
     #[serde(default)]
+    #[schemars(example = "crate::schema::example_log_position")]
     position: Option<i64>,
 }
 
 /// A single log entry.
-#[derive(Serialize)]
+#[derive(Serialize, JsonSchema)]
 pub(super) struct LogEntry {
     /// Log entry identifier.
+    #[schemars(example = "crate::schema::example_database_identifier")]
     id: i64,
 
     /// Log entry text value.
+    #[schemars(example = "crate::schema::example_log_entry")]
     text: String,
 }
 
-/// JSON response body.
-#[derive(Serialize)]
+/// Log entries response.
+#[derive(Serialize, JsonSchema)]
 pub(super) struct BuildSessionLogsResponse {
+    /// Log entries.
     logs: Vec<LogEntry>,
+}
+
+/// Generate OAPI documentation for the [`logs`] handler.
+pub(super) fn docs(op: TransformOperation) -> TransformOperation {
+    op.summary("Get build session logs.")
+        .description(
+            r#"A single log entry returned from this route does not correspond
+to a single line of log output, due to log collector processes batching log outputs
+from build session containers. However, you should be able to correctly reproduce
+the exact build output by printing log entries without any additional newlines.
+        "#,
+        )
+        .response::<200, Json<BuildSessionLogsResponse>>()
+        .response_with::<400, Json<Value>, _>(|op| {
+            op.description("Incorrect identifier format was provided.")
+                .example(example_error(BuildSessionLogsError::UnknownIdFormat))
+        })
+        .response_with::<404, Json<Value>, _>(|op| {
+            op.description("No build sessions with the provided identifier were found.")
+                .example(example_error(BuildSessionLogsError::BuildSessionNotFound))
+        })
 }
 
 /// Build session log list request handler.
@@ -84,7 +113,7 @@ pub(super) async fn logs(
                             .into_tuple::<i64>()
                             .one(txn)
                             .await?
-                            .ok_or(BuildSessionLogsError::NotFound)?;
+                            .ok_or(BuildSessionLogsError::BuildSessionNotFound)?;
 
                         log::Column::BuildSessionId.eq(id)
                     }

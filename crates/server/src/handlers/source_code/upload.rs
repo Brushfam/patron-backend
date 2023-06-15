@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use aide::{transform::TransformOperation, OperationIo};
 use axum::{
     extract::{multipart::MultipartError, Multipart, State},
     http::StatusCode,
@@ -12,21 +13,25 @@ use db::{
     EntityTrait, QueryFilter, QuerySelect, SelectExt, TransactionErrorExt, TransactionTrait,
 };
 use derive_more::{Display, Error, From};
+use schemars::JsonSchema;
 use serde::Serialize;
+use serde_json::Value;
 
-use crate::auth::AuthenticatedUserId;
+use crate::{auth::AuthenticatedUserId, schema::example_error};
 
 /// Errors that may occur during the source code upload process.
-#[derive(ErrorResponse, Display, From, Error)]
+#[derive(ErrorResponse, Display, From, Error, OperationIo)]
+#[aide(output)]
 pub(super) enum SourceCodeUploadError {
     /// Database-related error.
     DatabaseError(DbErr),
 
-    /// `multipart/form-data` request handling error.
-    MultipartError(MultipartError),
-
     /// AWS S3-related error.
     S3Error(s3::Error),
+
+    /// `multipart/form-data` request handling error.
+    #[status(StatusCode::BAD_REQUEST)]
+    MultipartError(MultipartError),
 
     /// Request didn't have any file uploads in it.
     #[status(StatusCode::UNPROCESSABLE_ENTITY)]
@@ -44,11 +49,25 @@ pub(super) enum SourceCodeUploadError {
     NonExistentUser,
 }
 
-/// JSON response body.
-#[derive(Serialize)]
+/// Source code identifier response.
+#[derive(Serialize, JsonSchema)]
 pub(super) struct SourceCodeUploadResponse {
     /// Source code identifier.
+    #[schemars(example = "crate::schema::example_database_identifier")]
     id: i64,
+}
+
+/// Generate OAPI documentation for the [`upload`] handler.
+pub(super) fn docs(op: TransformOperation) -> TransformOperation {
+    op.summary("Upload a new source code archive.")
+        .response::<200, Json<SourceCodeUploadResponse>>()
+        .response_with::<400, Json<Value>, _>(|op| {
+            op.description("Incorrect multipart/form-data request.")
+        })
+        .response_with::<422, Json<Value>, _>(|op| {
+            op.description("Incorrect file upload.")
+                .example(example_error(SourceCodeUploadError::NoFileUpload))
+        })
 }
 
 /// Upload a new source code archive for later usages in build sessions.

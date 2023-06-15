@@ -1,5 +1,6 @@
-use std::sync::Arc;
+use std::{array::TryFromSliceError, sync::Arc};
 
+use aide::{transform::TransformOperation, OperationIo};
 use axum::{
     extract::{Path, State},
     http::StatusCode,
@@ -11,27 +12,46 @@ use db::{
     QueryOrder, QuerySelect, TransactionErrorExt, TransactionTrait,
 };
 use derive_more::{Display, Error, From};
+use schemars::JsonSchema;
 use serde::Serialize;
+use serde_json::Value;
 
-use crate::hex_hash::HexHash;
+use crate::{hex_hash::HexHash, schema::example_error};
 
-/// JSON response body.
-#[derive(Serialize)]
+/// Code hash details.
+#[derive(Serialize, JsonSchema)]
 pub struct BuildSessionLatestData {
     /// Code hash corresponding to the provided source code archive hash.
-    pub code_hash: String,
+    #[schemars(example = "crate::schema::example_hex_hash")]
+    pub code_hash: HexHash,
 }
 
 /// Errors that may occur during the request handling.
-#[derive(ErrorResponse, Display, From, Error)]
+#[derive(ErrorResponse, Display, From, Error, OperationIo)]
+#[aide(output)]
 pub(super) enum BuildSessionLatestError {
     /// Database-related error.
     DatabaseError(DbErr),
+
+    /// Incorrect hash size stored inside of a database
+    IncorrectArchiveHash(TryFromSliceError),
 
     /// Provided archive hash doesn't have any completed build sessions.
     #[status(StatusCode::NOT_FOUND)]
     #[display(fmt = "no related build sessions were found")]
     NoRelatedBuildSessions,
+}
+
+/// Generate OAPI documentation for the [`latest`] handler.
+pub(super) fn docs(op: TransformOperation) -> TransformOperation {
+    op.summary("Get the latest build session code hash.")
+        .response::<200, Json<BuildSessionLatestData>>()
+        .response_with::<404, Json<Value>, _>(|op| {
+            op.description("No related build sessions were found.")
+                .example(example_error(
+                    BuildSessionLatestError::NoRelatedBuildSessions,
+                ))
+        })
 }
 
 /// Handler for getting the latest code hash that corresponds to the provided archive hash.
@@ -65,7 +85,7 @@ pub(super) async fn latest(
                 .ok_or(BuildSessionLatestError::NoRelatedBuildSessions)?;
 
             Ok(Json(BuildSessionLatestData {
-                code_hash: hex::encode(code_hash),
+                code_hash: code_hash.as_slice().try_into()?,
             }))
         })
     })

@@ -1,25 +1,39 @@
 use std::sync::Arc;
 
+use aide::{transform::TransformOperation, OperationIo};
 use axum::{
     extract::{Path, State},
     http::StatusCode,
+    Json,
 };
 use axum_derive_error::ErrorResponse;
 use db::{code, ColumnTrait, DatabaseConnection, DbErr, EntityTrait, QueryFilter, QuerySelect};
 use derive_more::{Display, Error, From};
+use serde_json::Value;
 
-use crate::hex_hash::HexHash;
+use crate::{hex_hash::HexHash, schema::example_error};
 
 /// Errors that may occur during the WASM blob request handling.
-#[derive(ErrorResponse, Display, From, Error)]
+#[derive(ErrorResponse, Display, From, Error, OperationIo)]
+#[aide(output)]
 pub(super) enum BuildSessionWasmError {
     /// Database-related error.
     DatabaseError(DbErr),
 
     /// The provided code hash doesn't have any WASM blobs saved in the database.
     #[status(StatusCode::NOT_FOUND)]
-    #[display(fmt = "code not found")]
-    CodeNotFound,
+    #[display(fmt = "build session not found")]
+    BuildSessionNotFound,
+}
+
+/// Generate OAPI documentation for the [`wasm`] handler.
+pub(super) fn docs(op: TransformOperation) -> TransformOperation {
+    op.summary("Get WASM blob of the latest build session.")
+        .response::<200, Vec<u8>>()
+        .response_with::<404, Json<Value>, _>(|op| {
+            op.description("No build sessions with the provided code hash were found.")
+                .example(example_error(BuildSessionWasmError::BuildSessionNotFound))
+        })
 }
 
 /// WASM blob request handler.
@@ -34,7 +48,7 @@ pub(super) async fn wasm(
         .into_tuple::<Vec<u8>>()
         .one(&*db)
         .await?
-        .ok_or(BuildSessionWasmError::CodeNotFound)?;
+        .ok_or(BuildSessionWasmError::BuildSessionNotFound)?;
 
     Ok(wasm)
 }

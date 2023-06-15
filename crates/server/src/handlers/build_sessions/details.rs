@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use aide::{transform::TransformOperation, OperationIo};
 use axum::{
     extract::{Path, State},
     http::StatusCode,
@@ -10,12 +11,33 @@ use db::{
     build_session, ColumnTrait, DatabaseConnection, DbErr, EntityTrait, QueryFilter, QueryOrder,
     QuerySelect,
 };
+use db::{sea_orm, FromQueryResult};
 use derive_more::{Display, Error, From};
+use schemars::JsonSchema;
+use serde::Serialize;
+use serde_json::Value;
 
-use crate::hex_hash::HexHash;
+use crate::{hex_hash::HexHash, schema::example_error};
+
+/// Build session tooling and source code details response.
+#[derive(Serialize, FromQueryResult, JsonSchema)]
+pub struct BuildSessionInfo {
+    /// Source code identifier.
+    #[schemars(example = "crate::schema::example_database_identifier")]
+    pub source_code_id: i64,
+
+    /// Version of `cargo-contract` used to build the contract.
+    #[schemars(example = "crate::schema::example_cargo_contract_version")]
+    pub cargo_contract_version: String,
+
+    /// Version of Rust toolchain used to build the contract.
+    #[schemars(example = "crate::schema::example_rustc_version")]
+    pub rustc_version: String,
+}
 
 /// Errors that may occur during the detail preview process.
-#[derive(ErrorResponse, Display, From, Error)]
+#[derive(ErrorResponse, Display, From, Error, OperationIo)]
+#[aide(output)]
 pub(super) enum BuildSessionDetailsError {
     /// Database-related error.
     DatabaseError(DbErr),
@@ -26,6 +48,18 @@ pub(super) enum BuildSessionDetailsError {
     BuildSessionNotFound,
 }
 
+/// Generate OAPI documentation for the [`details`] handler.
+pub(super) fn docs(op: TransformOperation) -> TransformOperation {
+    op.summary("Get build session tooling and source code information.")
+        .response::<200, Json<BuildSessionInfo>>()
+        .response_with::<404, Json<Value>, _>(|op| {
+            op.description("No build sessions with the provided code hash were found.")
+                .example(example_error(
+                    BuildSessionDetailsError::BuildSessionNotFound,
+                ))
+        })
+}
+
 /// Build session details handler.
 ///
 /// This route is suitable to acquire the information on tooling
@@ -33,7 +67,7 @@ pub(super) enum BuildSessionDetailsError {
 pub(super) async fn details(
     Path(code_hash): Path<HexHash>,
     State(db): State<Arc<DatabaseConnection>>,
-) -> Result<Json<build_session::BuildSessionInfo>, BuildSessionDetailsError> {
+) -> Result<Json<BuildSessionInfo>, BuildSessionDetailsError> {
     let model = build_session::Entity::find()
         .select_only()
         .columns([

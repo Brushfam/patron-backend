@@ -11,6 +11,7 @@ testing = ["sea-orm/sqlx-sqlite"]
 async-trait = "0.1.68"
 rand = "0.8.5"
 time = "0.3.21"
+schemars = "0.8.12"
 serde = { version = "1.0.162", features = ["derive"] }
 
 [dependencies.sea-orm]

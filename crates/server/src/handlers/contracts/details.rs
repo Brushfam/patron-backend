@@ -1,5 +1,6 @@
-use std::sync::Arc;
+use std::{array::TryFromSliceError, sync::Arc};
 
+use aide::{transform::TransformOperation, OperationIo};
 use axum::{
     extract::{Path, State},
     http::StatusCode,
@@ -8,20 +9,29 @@ use axum::{
 use axum_derive_error::ErrorResponse;
 use db::{contract, ColumnTrait, DatabaseConnection, DbErr, EntityTrait, QueryFilter, QuerySelect};
 use derive_more::{Display, Error, From};
+use schemars::JsonSchema;
 use serde::Serialize;
+use serde_json::Value;
 use sp_core::{
     crypto::{AccountId32, Ss58Codec},
     ByteArray,
 };
 
+use crate::{hex_hash::HexHash, schema::example_error};
+
+use super::WrappedAccountId32;
+
 /// Errors that may occur during the contract details request handling.
-#[derive(ErrorResponse, Display, From, Error)]
+#[derive(ErrorResponse, Display, From, Error, OperationIo)]
+#[aide(output)]
 pub(super) enum ContractDetailsError {
     /// Database-related error.
     DatabaseError(DbErr),
 
+    /// Incorrect hash size stored inside of a database
+    IncorrectArchiveHash(TryFromSliceError),
+
     /// Owner account attached to a contract is invalid.
-    #[status(StatusCode::UNPROCESSABLE_ENTITY)]
     #[display(fmt = "incorrect address size of an owner account")]
     IncorrectAddressSizeOfOwner,
 
@@ -31,28 +41,40 @@ pub(super) enum ContractDetailsError {
     ContractNotFound,
 }
 
-/// A single contract data.
-#[derive(Serialize)]
+/// Contract details response.
+#[derive(Serialize, JsonSchema)]
 pub struct ContractData {
     /// Related code hash.
-    pub code_hash: String,
+    #[schemars(example = "crate::schema::example_hex_hash")]
+    pub code_hash: HexHash,
 
     /// Contract owner.
     ///
     /// This field is only available is the contract
     /// was discovered after the initial activation of an event server.
+    #[schemars(example = "crate::schema::example_account")]
     pub owner: Option<String>,
+}
+
+/// Generate OAPI documentation for the [`details`] handler.
+pub(super) fn docs(op: TransformOperation) -> TransformOperation {
+    op.summary("Get details about the provided contract account.")
+        .response::<200, Json<ContractData>>()
+        .response_with::<404, Json<Value>, _>(|op| {
+            op.description("Provided contract account was not found.")
+                .example(example_error(ContractDetailsError::ContractNotFound))
+        })
 }
 
 /// Contract details request handler.
 pub(super) async fn details(
-    Path(account): Path<AccountId32>,
+    Path(account): Path<WrappedAccountId32>,
     State(db): State<Arc<DatabaseConnection>>,
 ) -> Result<Json<ContractData>, ContractDetailsError> {
     let (code_hash, owner) = contract::Entity::find()
         .select_only()
         .columns([contract::Column::CodeHash, contract::Column::Owner])
-        .filter(contract::Column::Address.eq(account.as_slice()))
+        .filter(contract::Column::Address.eq(account.0.as_slice()))
         .into_tuple::<(Vec<u8>, Option<Vec<u8>>)>()
         .one(&*db)
         .await?
@@ -72,7 +94,7 @@ pub(super) async fn details(
         .transpose()?;
 
     Ok(Json(ContractData {
-        code_hash: hex::encode(code_hash),
+        code_hash: code_hash.as_slice().try_into()?,
         owner,
     }))
 }
