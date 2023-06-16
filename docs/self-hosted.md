@@ -11,6 +11,8 @@ For deployment/API server, there are four separate components to use:
 
 If necessary, these components can be deployed on different servers with the single database attached to them.
 
+You can also [inspect](https://api.patron.works/docs) the public API of an API server.
+
 ## Repository cloning
 
 First, clone the repository using the following command:
