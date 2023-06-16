@@ -68,6 +68,8 @@ level = "info"
 [builder]
 # Path where to store temporary build images
 images_path = "/tmp/images"
+# URL of an API server
+api_server_url = "https://api.example.com"
 # The amount of build workers to start simultaneously.
 worker_count = 1
 # Build duration limit, after which the container if forcefully deleted (in seconds).
@@ -127,21 +129,6 @@ cargo build --release
 ```
 
 ## Smart contract builder image
-
-Before building the smart contract builder image itself, we need to adjust the
-API server URL in the `flake.nix` file.
-
-Search for the following snippet in `flake.nix` file:
-
-```
-url = "https://api.patron.works";
-```
-
-and adjust it for your own API server endpoint:
-
-```
-url = "https://api.example.com";
-```
 
 To build the Docker image itself, you can utilize the next command:
 

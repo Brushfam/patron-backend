@@ -4,7 +4,7 @@ use std::error::Error;
 
 use clap::Parser;
 use cli::Cli;
-use common::{config::Config, logging};
+use common::config::Config;
 use migration::{cli::run_migrate, sea_orm::Database};
 use tracing::info;
 
@@ -13,8 +13,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let cli = Cli::parse();
 
     let config = Config::new()?;
-
-    logging::init(&config);
 
     info!("connecting to database");
     let db = Database::connect(&config.database.url).await?;

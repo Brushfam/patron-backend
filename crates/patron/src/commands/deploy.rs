@@ -354,7 +354,11 @@ pub(crate) fn deploy(
         return Err(DeployError::InstantiationError);
     }
 
-    pg.finish_with_message("Contract uploaded.");
+    pg.finish_with_message(format!(
+        "Contract uploaded: {}/codeHash/{}",
+        auth_config.web_path(),
+        code_hash
+    ));
 
     Ok(())
 }

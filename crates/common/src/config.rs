@@ -59,6 +59,9 @@ pub struct Builder {
     /// Path in which contract builder will store all user artifacts.
     pub images_path: PathBuf,
 
+    /// URL of an API server.
+    pub api_server_url: String,
+
     /// Total count of workers started for build processing.
     #[serde(default = "default_worker_count")]
     pub worker_count: usize,

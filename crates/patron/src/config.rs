@@ -84,6 +84,11 @@ impl AuthenticationConfig {
         &self.token
     }
 
+    /// Get web UI path from the current configuration.
+    pub fn web_path(&self) -> &str {
+        &self.web_path
+    }
+
     /// Get API server path from the current configuration.
     pub fn server_path(&self) -> &str {
         &self.server_path

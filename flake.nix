@@ -58,8 +58,6 @@
           overlays = [(import rust-overlay)];
         };
 
-        url = "https://api.patron.works";
-
         src = nix-filter.lib.filter {
           root = ./.;
 
@@ -108,6 +106,13 @@
           });
 
         base = import ./nix/base.nix {inherit pkgs system;};
+
+        cargo-contract = import ./nix/cargo-contract.nix {
+          inherit craneLib pkgs;
+
+          version = "3.0.1";
+          sha256 = "sha256-4PeEq1iAZPm90hcAJnM5B6Bwj24vSc3X1BGcUB109n0=";
+        };
       in {
         devShell = pkgs.mkShell {
           buildInputs =
@@ -127,7 +132,7 @@
             });
 
           docker = {
-            ink-builder = import ./nix/ink-builder.nix {inherit base pkgs url;};
+            ink-builder = import ./nix/ink-builder.nix {inherit base cargo-contract pkgs;};
             server = import ./nix/server.nix {
               inherit base pkgs;
               bins = self.packages.${system}.default;

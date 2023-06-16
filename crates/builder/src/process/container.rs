@@ -60,16 +60,31 @@ pub struct Container {
     volume: Volume,
 }
 
+/// Container environment variables.
+pub struct Environment<'a, U: fmt::Display> {
+    /// Build session file upload token.
+    pub build_session_token: &'a str,
+
+    /// Rust toolchain version used to build the contract.
+    pub rustc_version: &'a str,
+
+    /// `cargo-contract` version used to build the contract.
+    pub cargo_contract_version: &'a str,
+
+    /// S3 pre-signed URL to the source code archive.
+    pub source_code_url: U,
+
+    /// API server URL used to upload the source code archive contents.
+    pub api_server_url: &'a str,
+}
+
 impl Container {
     /// Spawn new Docker container with the provided configuration.
     pub async fn new<U: fmt::Display>(
         config: &config::Builder,
         client: &Docker,
         volume: Volume,
-        build_session_token: &str,
-        rust_version: &str,
-        cargo_contract_version: &str,
-        source_code_url: U,
+        env: Environment<'_, U>,
     ) -> Result<Self, Error> {
         // Attempt to isolate container as much as possible.
         //
@@ -106,17 +121,18 @@ impl Container {
         let container = client
             .create_container(
                 Some(CreateContainerOptions {
-                    name: build_session_token,
+                    name: env.build_session_token,
                     ..Default::default()
                 }),
                 Config {
                     image: Some("ink-builder"),
                     // Pass information about the current build session to container
                     env: Some(vec![
-                        &format!("SOURCE_CODE_URL={source_code_url}"),
-                        &format!("CARGO_CONTRACT_VERSION={cargo_contract_version}"),
-                        &format!("RUST_VERSION={rust_version}"),
-                        &format!("BUILD_SESSION_TOKEN={build_session_token}"),
+                        &format!("SOURCE_CODE_URL={}", env.source_code_url),
+                        &format!("CARGO_CONTRACT_VERSION={}", env.cargo_contract_version),
+                        &format!("RUST_VERSION={}", env.rustc_version),
+                        &format!("BUILD_SESSION_TOKEN={}", env.build_session_token),
+                        &format!("API_SERVER_URL={}", env.api_server_url),
                     ]),
                     host_config: Some(host_config),
                     attach_stdout: Some(true),

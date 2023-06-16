@@ -7,7 +7,10 @@ use axum::{
     Json,
 };
 use axum_derive_error::ErrorResponse;
-use db::{contract, ColumnTrait, DatabaseConnection, DbErr, EntityTrait, QueryFilter, QuerySelect};
+use db::{
+    contract, node, ColumnTrait, DatabaseConnection, DbErr, EntityTrait, QueryFilter, QuerySelect,
+    TransactionErrorExt, TransactionTrait,
+};
 use derive_more::{Display, Error, From};
 use schemars::JsonSchema;
 use serde::Serialize;
@@ -35,6 +38,10 @@ pub(super) enum ContractDetailsError {
     #[display(fmt = "incorrect address size of an owner account")]
     IncorrectAddressSizeOfOwner,
 
+    /// Owner account attached to a contract is invalid.
+    #[display(fmt = "found a contract without related node")]
+    ContractWithoutRelatedNode,
+
     /// The requested contract was not found.
     #[status(StatusCode::NOT_FOUND)]
     #[display(fmt = "contract not found")]
@@ -44,6 +51,10 @@ pub(super) enum ContractDetailsError {
 /// Contract details response.
 #[derive(Serialize, JsonSchema)]
 pub struct ContractData {
+    /// Related node name.
+    #[schemars(example = "crate::schema::example_node")]
+    pub node: String,
+
     /// Related code hash.
     #[schemars(example = "crate::schema::example_hex_hash")]
     pub code_hash: HexHash,
@@ -71,32 +82,51 @@ pub(super) async fn details(
     Path(account): Path<WrappedAccountId32>,
     State(db): State<Arc<DatabaseConnection>>,
 ) -> Result<Json<ContractData>, ContractDetailsError> {
-    let (code_hash, owner) = contract::Entity::find()
-        .select_only()
-        .columns([contract::Column::CodeHash, contract::Column::Owner])
-        .filter(contract::Column::Address.eq(account.0.as_slice()))
-        .into_tuple::<(Vec<u8>, Option<Vec<u8>>)>()
-        .one(&*db)
-        .await?
-        .ok_or(ContractDetailsError::ContractNotFound)?;
+    db.transaction(|txn| {
+        Box::pin(async move {
+            let (node_id, code_hash, owner) = contract::Entity::find()
+                .select_only()
+                .columns([
+                    contract::Column::NodeId,
+                    contract::Column::CodeHash,
+                    contract::Column::Owner,
+                ])
+                .filter(contract::Column::Address.eq(account.0.as_slice()))
+                .into_tuple::<(i64, Vec<u8>, Option<Vec<u8>>)>()
+                .one(txn)
+                .await?
+                .ok_or(ContractDetailsError::ContractNotFound)?;
 
-    let owner = owner
-        .map(|address| {
-            Result::<_, ContractDetailsError>::Ok(
-                AccountId32::new(
-                    address
-                        .try_into()
-                        .map_err(|_| ContractDetailsError::IncorrectAddressSizeOfOwner)?,
-                )
-                .to_ss58check(),
-            )
+            let node = node::Entity::find_by_id(node_id)
+                .select_only()
+                .column(node::Column::Name)
+                .into_tuple::<String>()
+                .one(txn)
+                .await?
+                .ok_or(ContractDetailsError::ContractWithoutRelatedNode)?;
+
+            let owner = owner
+                .map(|address| {
+                    Result::<_, ContractDetailsError>::Ok(
+                        AccountId32::new(
+                            address
+                                .try_into()
+                                .map_err(|_| ContractDetailsError::IncorrectAddressSizeOfOwner)?,
+                        )
+                        .to_ss58check(),
+                    )
+                })
+                .transpose()?;
+
+            Ok(Json(ContractData {
+                node,
+                code_hash: code_hash.as_slice().try_into()?,
+                owner,
+            }))
         })
-        .transpose()?;
-
-    Ok(Json(ContractData {
-        code_hash: code_hash.as_slice().try_into()?,
-        owner,
-    }))
+    })
+    .await
+    .into_raw_result()
 }
 
 #[cfg(test)]
@@ -165,6 +195,7 @@ mod tests {
             .unwrap();
 
         assert_json!(response.json().await, {
+            "node": "test",
             "code_hash": hex::encode([0; 32]),
             "owner": AccountId32::from([2; 32]).to_string(),
         })

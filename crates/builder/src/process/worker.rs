@@ -20,7 +20,7 @@ use crate::{
 };
 
 use super::{
-    container::{ContainerRemoveError, DownloadFromContainerError},
+    container::{ContainerRemoveError, DownloadFromContainerError, Environment},
     volume::VolumeError,
 };
 
@@ -134,10 +134,13 @@ pub(crate) async fn spawn(
                             &builder_config,
                             &docker,
                             volume,
-                            &token,
-                            &build_session.rustc_version,
-                            &build_session.cargo_contract_version,
-                            source_code_url.uri(),
+                            Environment {
+                                build_session_token: &token,
+                                rustc_version: &build_session.rustc_version,
+                                cargo_contract_version: &build_session.cargo_contract_version,
+                                source_code_url: source_code_url.uri(),
+                                api_server_url: &builder_config.api_server_url,
+                            },
                         )
                         .await?;
 

@@ -110,6 +110,7 @@ pub(super) async fn logs(
                             .select_only()
                             .column(build_session::Column::Id)
                             .filter(build_session::Column::CodeHash.eq(&val.0[..]))
+                            .order_by_desc(build_session::Column::Id)
                             .into_tuple::<i64>()
                             .one(txn)
                             .await?
