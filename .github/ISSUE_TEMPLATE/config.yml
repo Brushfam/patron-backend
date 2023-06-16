@@ -1,11 +1,11 @@
 blank_issues_enabled: true
 contact_links:
   - name: ❓ Question
-    url: https://discord.com/channels/1060530809309761586/1060530809754370108
+    url: https://discord.com/channels/1060530809309761586/1118159566929154202
     about: Ask a question about Patron
   - name: 📖  Patron Documentation
     url: https://patron.works/getting-started
     about: The Patron documentation may answer your questions!
   - name: 💬  Patron Community Support (Discord)
-    url: https://discord.com/channels/1060530809309761586/1060530809754370108
+    url: https://discord.com/channels/1060530809309761586/1118159566929154202
     about: Please ask and answer questions here.
