@@ -2,7 +2,9 @@
 
 ![Patron](Patron.png)
 
-Patron is created by [Brushfam](https://brushfam.io/) team as unified solution for smart 
+Patron website: [patron.works](https://patron.works/)
+
+Patron is created by [Brushfam](https://brushfam.io/) team as a unified solution for smart 
 contract verification. First, it provides a developer-oriented CLI that allows to 
 deploy and verify a contract in one step. Patron uses [Astar network](https://astar.network/) 
 for deployment. Another part of the project is [Patron UI](https://patron.works/), where you can 
