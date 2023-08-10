@@ -11,17 +11,35 @@ blake2 = "0.10.6"
 byte-unit = { version = "4.0.19", default-features = false }
 figment = { version = "0.10.8", default-features = false, features = ["env", "toml"] }
 futures-util = { version = "0.3.28", optional = true }
-itertools = { version = "0.10.5", optional = true }
 hex = "0.4.3"
-pallet-contracts-primitives = { version = "23.0.0", optional = true }
-parity-scale-codec = { version = "3.5.0", optional = true }
+lru = { version = "0.11.0", optional = true }
 serde = { version = "1.0.162", features = ["derive"] }
-subxt = { version = "0.28.0", optional = true }
 tracing-core = { version = "0.1.30", optional = true }
 tracing-subscriber = { version = "0.3.17", optional = true }
+
+frame-metadata = { version = "15.1", default-features = false, features = ["v14", "serde_full", "decode"], optional = true }
+parity-scale-codec = { version = "3.6.3", optional = true }
+pallet-contracts = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43", default-features = false, optional = true }
+pallet-contracts-primitives = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43", default-features = false, optional = true }
+sp-core = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43", default-features = false, optional = true }
+sp-version = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43", default-features = false, optional = true }
+substrate-api-client = { git = "https://github.com/scs/substrate-api-client", branch = "polkadot-v0.9.43", default-features = false, features = ["jsonrpsee-client", "contracts-xt"], optional = true }
 
 [features]
 logging = ["tracing-core", "tracing-subscriber"]
 s3 = ["aws-config", "aws-sdk-s3"]
-rpc = ["futures-util", "itertools", "pallet-contracts-primitives", "parity-scale-codec", "subxt"]
+rpc = [
+    "lru",
+    "frame-metadata",
+    "futures-util",
+    "parity-scale-codec",
+    "pallet-contracts",
+    "pallet-contracts-primitives",
+    "sp-core",
+    "sp-version",
+    "substrate-api-client"
+]
 test-utils = []
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }

@@ -1,7 +1,7 @@
 //! Supported network instance.
 //!
 //! This model represents a single network with information about an RPC node,
-//! its schema, last confirmed block for event client and optionally a payment contract
+//! last confirmed block for event client and optionally a payment contract
 //! that can be used to acquire membership fees.
 
 use sea_orm::entity::prelude::*;
@@ -18,9 +18,6 @@ pub struct Model {
 
     /// RPC node WebSocket URL.
     pub url: String,
-
-    /// Node schema used to communicate with an RPC node.
-    pub schema: String,
 
     /// Payment contract address.
     ///

@@ -7,11 +7,12 @@ mod events;
 use std::sync::Arc;
 
 use aide::axum::{routing::get_with, ApiRouter};
+use common::rpc::sp_core::crypto::AccountId32;
 use db::DatabaseConnection;
 use schemars::JsonSchema;
 use serde::Deserialize;
-use sp_core::crypto::AccountId32;
 
+/// [`AccountId32`] wrapper for OAPI documentation purposes.
 #[derive(Deserialize, JsonSchema)]
 #[serde(transparent)]
 struct WrappedAccountId32(

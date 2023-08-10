@@ -7,6 +7,9 @@
 //! paths, we need to ignore directories which are most likely to be unused during builds,
 //! such as the `target` directory and hidden entries (for example, `.git`).
 
+#![deny(missing_docs)]
+#![deny(clippy::missing_docs_in_private_items)]
+
 use clap::Parser;
 use commands::{Cli, Commands};
 
@@ -19,6 +22,9 @@ mod commands;
 /// CLI-specific configuration (authentication, project).
 mod config;
 
+/// Remote build process implementation.
+mod process;
+
 /// CLI entrypoint.
 fn main() -> Result<(), anyhow::Error> {
     let cli = Cli::parse();
@@ -26,6 +32,8 @@ fn main() -> Result<(), anyhow::Error> {
     match cli.command {
         Commands::Auth(args) => commands::auth(args)?,
         Commands::Deploy(args) => commands::deploy(args)?,
+        Commands::Build(args) => commands::build(args)?,
+        Commands::Verify(args) => commands::verify(args)?,
     }
 
     Ok(())

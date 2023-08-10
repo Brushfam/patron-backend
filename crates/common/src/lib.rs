@@ -19,6 +19,5 @@ pub mod logging;
 #[cfg(feature = "s3")]
 pub mod s3;
 
-/// Substrate node RPC utilities.
 #[cfg(feature = "rpc")]
 pub mod rpc;

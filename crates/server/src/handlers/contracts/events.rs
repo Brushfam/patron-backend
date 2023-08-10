@@ -6,6 +6,7 @@ use axum::{
     Json,
 };
 use axum_derive_error::ErrorResponse;
+use common::rpc::sp_core::ByteArray;
 use db::{
     event, ColumnTrait, DatabaseConnection, DbErr, EntityTrait, PrimitiveDateTime, QueryFilter,
     QueryOrder, QuerySelect,
@@ -14,7 +15,6 @@ use derive_more::{Display, Error, From};
 use futures_util::TryStreamExt;
 use schemars::JsonSchema;
 use serde::Serialize;
-use sp_core::ByteArray;
 
 use super::WrappedAccountId32;
 
@@ -83,18 +83,17 @@ mod tests {
     use assert_json::assert_json;
     use axum::{body::Body, http::Request};
     use common::config::Config;
+    use common::rpc::sp_core::crypto::AccountId32;
     use db::{
         code, contract, event, node, ActiveValue, DatabaseConnection, EntityTrait, OffsetDateTime,
         PrimitiveDateTime,
     };
-    use sp_core::crypto::AccountId32;
     use tower::ServiceExt;
 
     async fn create_test_env(db: &DatabaseConnection) {
         let node = node::Entity::insert(node::ActiveModel {
             name: ActiveValue::Set(String::from("test")),
             url: ActiveValue::Set(String::from("ws://localhost:9944")),
-            schema: ActiveValue::Set(String::from("test")),
             confirmed_block: ActiveValue::Set(0),
             ..Default::default()
         })

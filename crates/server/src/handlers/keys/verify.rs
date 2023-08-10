@@ -3,6 +3,10 @@ use std::sync::Arc;
 use aide::{transform::TransformOperation, OperationIo};
 use axum::{extract::State, http::StatusCode, Extension, Json};
 use axum_derive_error::ErrorResponse;
+use common::rpc::sp_core::{
+    sr25519::{Pair, Public, Signature},
+    Pair as _,
+};
 use db::{
     public_key, user, ActiveValue, ColumnTrait, DatabaseConnection, DbErr, EntityTrait,
     QueryFilter, QuerySelect, SelectExt, TransactionErrorExt, TransactionTrait,
@@ -11,10 +15,6 @@ use derive_more::{Display, Error, From};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::Value;
-use sp_core::{
-    sr25519::{Pair, Public, Signature},
-    Pair as _,
-};
 
 use crate::{auth::AuthenticatedUserId, schema::example_error};
 

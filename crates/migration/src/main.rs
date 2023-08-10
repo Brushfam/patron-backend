@@ -12,7 +12,7 @@ use tracing::info;
 async fn main() -> Result<(), Box<dyn Error>> {
     let cli = Cli::parse();
 
-    let config = Config::new()?;
+    let config = Config::new(cli.config)?;
 
     info!("connecting to database");
     let db = Database::connect(&config.database.url).await?;

@@ -7,6 +7,10 @@ use axum::{
     Json,
 };
 use axum_derive_error::ErrorResponse;
+use common::rpc::sp_core::{
+    sr25519::{Pair, Public, Signature},
+    Pair as _,
+};
 use db::{
     cli_token, public_key, sea_query::OnConflict, token, ActiveValue, ColumnTrait,
     DatabaseConnection, DbErr, EntityTrait, QueryFilter, QuerySelect, TransactionErrorExt,
@@ -16,10 +20,6 @@ use derive_more::{Display, Error, From};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use sp_core::{
-    sr25519::{Pair, Public, Signature},
-    Pair as _,
-};
 
 use crate::schema::example_error;
 
@@ -183,6 +183,7 @@ mod tests {
         http::{Request, StatusCode},
     };
     use common::config::Config;
+    use common::rpc::sp_core::crypto::{AccountId32, Ss58Codec};
     use db::{
         cli_token, public_key, token::TOKEN_LENGTH, user, ActiveValue, DatabaseConnection,
         EntityTrait,
@@ -192,7 +193,6 @@ mod tests {
         thread_rng,
     };
     use serde_json::json;
-    use sp_core::crypto::{AccountId32, Ss58Codec};
     use tower::{Service, ServiceExt};
 
     const ACCOUNT_ID: &str = "5FeLhJAs4CUHqpWmPDBLeL7NLAoHsB2ZuFZ5Mk62EgYemtFj";

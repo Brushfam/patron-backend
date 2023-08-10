@@ -24,6 +24,7 @@ pub struct Server {
     pub address: SocketAddr,
 }
 
+/// Implementation of [`serde`]'s deserializer for [`FromStr`] types.
 #[cfg(feature = "logging")]
 fn deserialize_from_str<'de, T, D>(deserializer: D) -> Result<T, D::Error>
 where
@@ -113,11 +114,11 @@ fn default_metadata_size_limit() -> usize {
 }
 
 fn default_memory_limit() -> i64 {
-    n_gib_bytes!(8) as i64
+    n_gib_bytes!(4) as i64
 }
 
 fn default_memory_swap_limit() -> i64 {
-    n_gib_bytes!(8) as i64
+    n_gib_bytes!(4) as i64
 }
 
 fn default_volume_size() -> String {
@@ -180,9 +181,9 @@ impl Config {
     /// See [`Env`] for more details on how to use environment variables configuration.
     ///
     /// [`Env`]: figment::providers::Env
-    pub fn new() -> Result<Self, figment::Error> {
+    pub fn new(path: Option<PathBuf>) -> Result<Self, figment::Error> {
         Figment::new()
-            .merge(Toml::file("Config.toml"))
+            .merge(Toml::file(path.unwrap_or(PathBuf::from("Config.toml"))))
             .merge(Env::prefixed("CONFIG_").split("_"))
             .extract()
     }

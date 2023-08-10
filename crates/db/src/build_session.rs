@@ -33,9 +33,6 @@ pub struct Model {
     /// `cargo-contract` tooling version.
     pub cargo_contract_version: String,
 
-    /// Rust tooling version.
-    pub rustc_version: String,
-
     /// WASM blob code hash, if the contract build was successful.
     pub code_hash: Option<Vec<u8>>,
 
@@ -118,6 +115,5 @@ impl ActiveModelBehavior for ActiveModel {}
 pub struct ProcessedBuildSession {
     pub id: i64,
     pub source_code_id: i64,
-    pub rustc_version: String,
     pub cargo_contract_version: String,
 }

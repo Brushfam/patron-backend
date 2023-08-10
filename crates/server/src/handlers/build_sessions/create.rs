@@ -17,7 +17,7 @@ use validator::Validate;
 
 use crate::{auth::AuthenticatedUserId, schema::example_error, validation::ValidatedJson};
 
-/// Regular expression to match stable versions of Rust toolchain and `cargo-contract`.
+/// Regular expression to match stable versions of `cargo-contract`.
 ///
 /// Currently, this regex does not support any nightly or unstable versions of the previously mentioned tooling.
 static VERSION_REGEX: Lazy<Regex> = Lazy::new(|| {
@@ -53,11 +53,6 @@ pub(super) struct BuildSessionCreateRequest {
     #[validate(regex = "VERSION_REGEX")]
     #[schemars(example = "crate::schema::example_cargo_contract_version")]
     cargo_contract_version: String,
-
-    /// Rust tooling version.
-    #[validate(regex = "VERSION_REGEX")]
-    #[schemars(example = "crate::schema::example_rustc_version")]
-    rustc_version: String,
 }
 
 /// JSON response body.
@@ -105,7 +100,6 @@ pub(super) async fn create(
                     user_id: ActiveValue::Set(Some(current_user.id())),
                     source_code_id: ActiveValue::Set(request.source_code_id),
                     cargo_contract_version: ActiveValue::Set(request.cargo_contract_version),
-                    rustc_version: ActiveValue::Set(request.rustc_version),
                     ..Default::default()
                 })
                 .exec_with_returning(txn)
@@ -196,7 +190,6 @@ mod tests {
                     .body(Body::from_json(json!({
                         "source_code_id": source_code_id,
                         "cargo_contract_version": "3.0.0",
-                        "rustc_version": "1.69.0"
                     })))
                     .unwrap(),
             )
@@ -224,7 +217,6 @@ mod tests {
                     .body(Body::from_json(json!({
                         "source_code_id": source_code_id,
                         "cargo_contract_version": "abc-1.2.3",
-                        "rustc_version": "1.69.0"
                     })))
                     .unwrap(),
             )
@@ -250,7 +242,6 @@ mod tests {
                     .body(Body::from_json(json!({
                         "source_code_id": 123,
                         "cargo_contract_version": "3.0.0",
-                        "rustc_version": "1.69.0"
                     })))
                     .unwrap(),
             )

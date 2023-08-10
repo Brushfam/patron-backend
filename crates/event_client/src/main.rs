@@ -41,6 +41,9 @@
 //! [`traverse`]: cli::traverse
 //! [`update_contract`]: cli::update_contract
 
+#![deny(missing_docs)]
+#![deny(clippy::missing_docs_in_private_items)]
+
 /// CLI general configuration and subcommands.
 mod cli;
 
@@ -56,7 +59,9 @@ use tracing::info;
 /// Event client entrypoint.
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
-    let config = Config::new()?;
+    let cli = Cli::parse();
+
+    let config = Config::new(cli.config)?;
 
     logging::init(&config);
 
@@ -64,13 +69,12 @@ async fn main() -> Result<(), anyhow::Error> {
     let database = Database::connect(&config.database.url).await?;
     info!("database connection established");
 
-    match Cli::parse().command {
+    match cli.command {
         Command::Initialize {
             name,
             url,
-            schema,
             payment_address,
-        } => cli::initialize(database, name, url, schema, payment_address).await?,
+        } => cli::initialize(database, name, url, payment_address).await?,
         Command::Traverse { name } => cli::traverse(database, name).await?,
         Command::UpdateContract {
             name,

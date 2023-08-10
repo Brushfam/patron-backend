@@ -148,7 +148,6 @@ mod tests {
             source_code_id: ActiveValue::Set(source_code_id),
             status: ActiveValue::Set(build_session::Status::New),
             cargo_contract_version: ActiveValue::Set(String::from("3.0.0")),
-            rustc_version: ActiveValue::Set(String::from("1.69.0")),
             ..Default::default()
         })
         .exec_with_returning(db)

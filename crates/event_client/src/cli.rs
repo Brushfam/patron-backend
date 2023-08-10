@@ -1,7 +1,16 @@
+/// `initialize` subcommand.
 mod initialize;
+
+/// `traverse` subcommand.
 mod traverse;
+
+/// `update_contract` subcommand.
 mod update_contract;
+
+/// `watch` subcommand.
 mod watch;
+
+use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 
@@ -17,6 +26,10 @@ pub(crate) struct Cli {
     /// Selected subcommand.
     #[command(subcommand)]
     pub command: Command,
+
+    /// Path to configuration file.
+    #[clap(short, long, value_parser)]
+    pub config: Option<PathBuf>,
 }
 
 /// Supported subcommands.
@@ -30,16 +43,16 @@ pub(crate) enum Command {
         /// Node WebSocket URL
         url: String,
 
-        /// Schema name, that identifies the node's ABI.
-        schema: String,
-
         /// Address of a contract that accepts membership payments.
         #[clap(long)]
         payment_address: Option<String>,
     },
 
     /// Traverse old blocks of the provided node for old events.
-    Traverse { name: String },
+    Traverse {
+        /// Node name.
+        name: String,
+    },
 
     /// Update payment contract address.
     UpdateContract {
@@ -51,5 +64,8 @@ pub(crate) enum Command {
     },
 
     /// Watch node for new blocks to discover contract events.
-    Watch { name: String },
+    Watch {
+        /// Node name.
+        name: String,
+    },
 }

@@ -1,13 +1,13 @@
 use std::fmt::Display;
 
 use axum::response::IntoResponse;
-use db::{build_session, event::EventBody};
-use serde_json::{json, Value};
-use sp_core::{
+use common::rpc::sp_core::{
     crypto::{AccountId32, Ss58Codec},
     sr25519::{Pair, Public, Signature},
     Pair as _,
 };
+use db::{build_session, event::EventBody};
+use serde_json::{json, Value};
 
 use crate::hex_hash::HexHash;
 
@@ -42,7 +42,6 @@ generate_examples!(
     database_identifier, i64, 1;
     hex_hash, HexHash, HexHash([200; 32]);
     cargo_contract_version, String, String::from("3.0.1");
-    rustc_version, String, String::from("1.70.0");
     build_session_status, build_session::Status, build_session::Status::Completed;
     log_position, Option<i64>, Some(40);
     log_entry, String, String::from("Compiling futures-util v0.3.28");

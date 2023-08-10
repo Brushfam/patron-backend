@@ -29,10 +29,6 @@ pub struct BuildSessionInfo {
     /// Version of `cargo-contract` used to build the contract.
     #[schemars(example = "crate::schema::example_cargo_contract_version")]
     pub cargo_contract_version: String,
-
-    /// Version of Rust toolchain used to build the contract.
-    #[schemars(example = "crate::schema::example_rustc_version")]
-    pub rustc_version: String,
 }
 
 /// Errors that may occur during the detail preview process.
@@ -73,7 +69,6 @@ pub(super) async fn details(
         .columns([
             build_session::Column::SourceCodeId,
             build_session::Column::CargoContractVersion,
-            build_session::Column::RustcVersion,
         ])
         .filter(build_session::Column::CodeHash.eq(&code_hash.0[..]))
         .order_by_desc(build_session::Column::CreatedAt)
@@ -121,7 +116,6 @@ mod tests {
             source_code_id: ActiveValue::Set(source_code_id),
             status: ActiveValue::Set(build_session::Status::New),
             cargo_contract_version: ActiveValue::Set(String::from("3.0.0")),
-            rustc_version: ActiveValue::Set(String::from("1.69.0")),
             code_hash: ActiveValue::Set(Some(vec![0; 32])),
             ..Default::default()
         })
@@ -149,7 +143,6 @@ mod tests {
 
         assert_json!(response.json().await, {
             "source_code_id": 1,
-            "rustc_version": "1.69.0",
             "cargo_contract_version": "3.0.0"
         });
     }

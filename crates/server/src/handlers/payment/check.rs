@@ -1,16 +1,14 @@
-use std::{array::TryFromSliceError, fmt, str::FromStr, sync::Arc};
+use std::{array::TryFromSliceError, sync::Arc};
 
 use aide::{transform::TransformOperation, OperationIo};
 use axum::{extract::State, http::StatusCode, Extension, Json};
 use axum_derive_error::ErrorResponse;
-use common::{
-    hash::blake2,
-    rpc::{
-        parity_scale_codec::{self, Decode},
-        subxt::{self, ext::sp_runtime::DispatchError, OnlineClient, PolkadotConfig},
-        InvalidSchema, Schema,
-    },
-};
+use common::hash::blake2;
+use common::rpc::parity_scale_codec::Decode;
+use common::rpc::sp_core::crypto::AccountId32;
+use common::rpc::substrate_api_client::rpc::JsonrpseeClient;
+use common::rpc::substrate_api_client::Api;
+use common::rpc::{self, parity_scale_codec, substrate_api_client};
 use db::{
     node, public_key, user, ActiveValue, ColumnTrait, DatabaseConnection, DbErr, EntityTrait,
     QueryFilter, QuerySelect, SelectExt, TransactionErrorExt, TransactionTrait,
@@ -20,7 +18,8 @@ use ink_metadata::LangError;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::Value;
-use sp_core::crypto::AccountId32;
+use tokio::runtime::Handle;
+use tokio::task::JoinError;
 
 use crate::{auth::AuthenticatedUserId, schema::example_error};
 
@@ -43,20 +42,18 @@ pub(super) enum PaymentCheckError {
     /// Database-related error.
     DatabaseError(DbErr),
 
-    /// Invalid schema name is stored inside of a database.
-    Schema(InvalidSchema),
-
     /// Substrate RPC-related error.
-    Rpc(subxt::Error),
-
-    /// Contract call dispatch error.
-    Dispatch(WrappedDispatchError),
+    #[display(fmt = "substrate rpc error: {:?}", _0)]
+    Rpc(#[error(ignore)] substrate_api_client::Error),
 
     /// SCALE codec error.
     Scale(parity_scale_codec::Error),
 
     /// Contract address stored inside of a database is invalid.
     ContractAddress(TryFromSliceError),
+
+    /// Unable to spawn Tokio task to handle RPC calls.
+    JoinError(JoinError),
 
     /// Contract call error.
     #[display(fmt = "unable to call the contract")]
@@ -92,18 +89,6 @@ pub(super) enum PaymentCheckError {
     #[display(fmt = "user already has membership available")]
     PaidAlready,
 }
-
-/// [`DispatchError`] wrapper that provides an implementation of [`std::error::Error`] trait.
-#[derive(Debug)]
-pub(super) struct WrappedDispatchError(DispatchError);
-
-impl fmt::Display for WrappedDispatchError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self.0)
-    }
-}
-
-impl std::error::Error for WrappedDispatchError {}
 
 /// Generate OAPI documentation for the [`check`] handler.
 pub(super) fn docs(op: TransformOperation) -> TransformOperation {
@@ -151,38 +136,41 @@ pub(super) async fn check(
                 return Err(PaymentCheckError::InvalidKey);
             }
 
-            let (url, schema_name, contract) = node::Entity::find_by_id(request.node_id)
+            let (url, contract) = node::Entity::find_by_id(request.node_id)
                 .select_only()
-                .columns([
-                    node::Column::Url,
-                    node::Column::Schema,
-                    node::Column::PaymentContract,
-                ])
-                .into_tuple::<(String, String, Option<Vec<u8>>)>()
+                .columns([node::Column::Url, node::Column::PaymentContract])
+                .into_tuple::<(String, Option<Vec<u8>>)>()
                 .one(txn)
                 .await?
                 .ok_or(PaymentCheckError::InvalidNodeId)?;
 
             let contract = contract.ok_or(PaymentCheckError::NodeWithoutPayments)?;
 
-            let rpc = OnlineClient::<PolkadotConfig>::from_url(url).await?;
-            let schema = Schema::from_str(&schema_name)?;
-
             // Make sure this matches the ABI of the check message.
             let mut data = Vec::with_capacity(36);
             data.extend_from_slice(&blake2("check".as_bytes())[0..4]);
             data.extend_from_slice(request.account.as_ref());
 
-            let raw_response = schema
-                .call_contract(
-                    &rpc,
-                    subxt::utils::AccountId32(contract.as_slice().try_into()?),
-                    data,
-                )
-                .await?
-                .result
-                .map_err(WrappedDispatchError)?
-                .data;
+            let raw_response = tokio::task::spawn_blocking(|| {
+                Handle::current().block_on(async move {
+                    let client = JsonrpseeClient::new(&url)
+                        .map_err(substrate_api_client::Error::RpcClient)?;
+                    let api = Api::new(client).await?;
+
+                    let val = rpc::call_contract(
+                        &api,
+                        AccountId32::new(contract.as_slice().try_into()?),
+                        data,
+                    )
+                    .await?;
+
+                    Result::<_, PaymentCheckError>::Ok(val)
+                })
+            })
+            .await??
+            .result
+            .map_err(|_| PaymentCheckError::CallError)?
+            .data;
 
             let response: Result<bool, LangError> = Decode::decode(&mut &*raw_response)?;
 

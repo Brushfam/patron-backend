@@ -13,6 +13,7 @@ pub fn init(config: &Config) {
 
     let target_filters = Targets::new()
         .with_target("sqlx", Level::WARN)
+        .with_target("substrate_api_client", Level::WARN)
         .with_default(config.logging.level);
 
     tracing_subscriber::registry()

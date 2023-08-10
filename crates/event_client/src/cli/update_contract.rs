@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use common::rpc::subxt::utils::AccountId32;
+use common::rpc::sp_core::crypto::AccountId32;
 use db::{
     node, ColumnTrait, DatabaseConnection, DbErr, EntityTrait, QueryFilter, TransactionErrorExt,
     TransactionTrait,
@@ -36,7 +36,7 @@ pub async fn update_contract(
         .map(AccountId32::from_str)
         .transpose()
         .map_err(|_| UpdateContractError::InvalidPaymentAddress)?
-        .map(|addr| addr.0.to_vec());
+        .map(|addr| <[u8; 32]>::from(addr).to_vec());
 
     database
         .transaction(|txn| {

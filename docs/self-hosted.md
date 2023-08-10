@@ -210,11 +210,10 @@ This component provides users with the information about events on-chain.
 To initially fill the database with contract and code data use the `initialize` command:
 
 ```sh
-./event_client initialize my_node wss://node.example.com:443/ astar
+./event_client initialize my_node wss://node.example.com:443/
 ```
 
-`initialize` command accepts the node name, node URL, and node schema, which is used to
-correctly communicate with the node.
+`initialize` command accepts the node name and the node URL.
 
 You may also optionally pass `--payment-address` flag to enable membership payments using a separate smart contract.
 See the ["Membership smart contract ABI"](#membership-smart-contract-abi) for more information on that.

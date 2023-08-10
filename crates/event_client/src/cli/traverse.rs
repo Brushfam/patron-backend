@@ -1,8 +1,13 @@
-use std::str::FromStr;
-
 use common::rpc::{
-    subxt::{self, Config, Error, OnlineClient, PolkadotConfig},
-    ContractEvent, ContractEventData, InvalidSchema, Schema,
+    self,
+    sp_core::{ByteArray, H256},
+    substrate_api_client::{
+        self,
+        ac_primitives::PolkadotConfig,
+        rpc::{JsonrpseeClient, Request},
+        Api, Error,
+    },
+    Instantiated, MetadataCache,
 };
 use db::{
     contract, node, ColumnTrait, DatabaseConnection, DbErr, EntityTrait, QueryFilter,
@@ -21,10 +26,8 @@ pub enum TraverseError {
     DatabaseError(DbErr),
 
     /// Substrate RPC-related error.
-    RpcError(subxt::Error),
-
-    /// User provided invalid schema name.
-    Schema(InvalidSchema),
+    #[display(fmt = "rpc error: {:?}", _0)]
+    RpcError(#[error(ignore)] substrate_api_client::Error),
 
     /// The provided node name is incorrect.
     #[display(fmt = "node not found")]
@@ -50,24 +53,30 @@ pub async fn traverse(database: DatabaseConnection, name: String) -> Result<(), 
         .await?
         .ok_or(TraverseError::NodeNotFound)?;
 
-    let api = OnlineClient::<PolkadotConfig>::from_url(&node.url).await?;
+    let client = JsonrpseeClient::new(&node.url).map_err(substrate_api_client::Error::RpcClient)?;
+    let api = Api::new(client).await?;
 
-    let schema = Schema::from_str(&node.schema)?;
-
-    let stream = block_mapping_stream(0..=node.confirmed_block as u64, &api);
+    let stream = block_mapping_stream(0..=node.confirmed_block as u32, &api);
 
     pin_mut!(stream);
 
+    let mut metadata_cache = MetadataCache::new();
+
     while let Some((_, block_hash)) = stream.try_next().await? {
-        if let Ok(block_data) = parse_block(&api, &schema, block_hash).await {
+        if let Ok(block_data) = parse_block(&api, block_hash, &mut metadata_cache).await {
             database
                 .transaction::<_, _, TraverseError>(|txn| {
                     Box::pin(async move {
-                        for (contract, deployer) in block_data.instantiations {
+                        for instantiation in block_data.instantiations {
                             contract::Entity::update_many()
-                                .col_expr(contract::Column::Owner, (&deployer[..]).into())
+                                .col_expr(
+                                    contract::Column::Owner,
+                                    (instantiation.deployer.as_slice()).into(),
+                                )
                                 .filter(contract::Column::NodeId.eq(node.id))
-                                .filter(contract::Column::Address.eq(&contract[..]))
+                                .filter(
+                                    contract::Column::Address.eq(instantiation.contract.as_slice()),
+                                )
                                 .exec(txn)
                                 .await?;
                         }
@@ -86,26 +95,18 @@ pub async fn traverse(database: DatabaseConnection, name: String) -> Result<(), 
 /// Parsed block data.
 struct BlockData {
     /// Smart contract instantiations found in block.
-    instantiations: Vec<([u8; 32], [u8; 32])>,
+    instantiations: Vec<Instantiated>,
 }
 
-/// Attempt to parse block associated with the provided block hash using the provided schema.
-async fn parse_block<T: Config + Send + Sync>(
-    api: &OnlineClient<T>,
-    schema: &Schema<T>,
-    block_hash: T::Hash,
+/// Attempt to parse block associated with the provided block hash.
+async fn parse_block<C: Request>(
+    api: &Api<PolkadotConfig, C>,
+    block_hash: H256,
+    metadata_cache: &mut MetadataCache,
 ) -> Result<BlockData, Error> {
-    let events = schema.block(api, Some(block_hash)).await?.events().await?;
+    let events = rpc::events(api, block_hash, metadata_cache).await?;
 
-    let instantiations = schema
-        .events(&events, ContractEvent::Instantiated)
-        .filter_map_ok(|event| match event {
-            ContractEventData::Instantiated { contract, deployer } => {
-                Some((contract.0, deployer.0))
-            }
-            _ => None,
-        })
-        .try_collect()?;
+    let instantiations = events.find().try_collect()?;
 
     Ok(BlockData { instantiations })
 }

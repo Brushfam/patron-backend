@@ -74,7 +74,7 @@
           ];
         };
 
-        rustToolchain = pkgs.rust-bin.stable.latest.default.override {
+        rustToolchain = pkgs.rust-bin.nightly."2023-05-22".default.override {
           extensions = [
             "rustc"
             "cargo"
@@ -106,21 +106,20 @@
           });
 
         base = import ./nix/base.nix {inherit pkgs system;};
-
-        cargo-contract = import ./nix/cargo-contract.nix {
-          inherit craneLib pkgs;
-
-          version = "3.0.1";
-          sha256 = "sha256-4PeEq1iAZPm90hcAJnM5B6Bwj24vSc3X1BGcUB109n0=";
-        };
       in {
         devShell = pkgs.mkShell {
-          buildInputs =
-            [
-              rustToolchain
-            ]
-            ++ commonArgs.buildInputs
-            ++ commonArgs.nativeBuildInputs;
+          packages = [rustToolchain];
+          inputsFrom = [commonArgs];
+        };
+
+        apps.loadDockerImages = flake-utils.lib.mkApp {
+          drv = pkgs.writeShellScriptBin "load-docker-images" (let
+            mkStages = stages:
+              pkgs.lib.concatMapStringsSep
+              "\n" (stage: "docker load < ${self.packages.${system}.docker.build-stages.${stage}}")
+              stages;
+          in
+            mkStages (builtins.attrNames self.packages.${system}.docker.build-stages));
         };
 
         packages = {
@@ -132,7 +131,7 @@
             });
 
           docker = {
-            ink-builder = import ./nix/ink-builder.nix {inherit base cargo-contract pkgs;};
+            build-stages = import ./nix/build-stages.nix {inherit base pkgs;};
             server = import ./nix/server.nix {
               inherit base pkgs;
               bins = self.packages.${system}.default;

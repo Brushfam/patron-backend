@@ -7,6 +7,10 @@ use axum::{
     Json,
 };
 use axum_derive_error::ErrorResponse;
+use common::rpc::sp_core::{
+    crypto::{AccountId32, Ss58Codec},
+    ByteArray,
+};
 use db::{
     contract, node, ColumnTrait, DatabaseConnection, DbErr, EntityTrait, QueryFilter, QuerySelect,
     TransactionErrorExt, TransactionTrait,
@@ -15,10 +19,6 @@ use derive_more::{Display, Error, From};
 use schemars::JsonSchema;
 use serde::Serialize;
 use serde_json::Value;
-use sp_core::{
-    crypto::{AccountId32, Ss58Codec},
-    ByteArray,
-};
 
 use crate::{hex_hash::HexHash, schema::example_error};
 
@@ -141,15 +141,14 @@ mod tests {
         http::{Request, StatusCode},
     };
     use common::config::Config;
+    use common::rpc::sp_core::crypto::AccountId32;
     use db::{code, contract, node, ActiveValue, DatabaseConnection, EntityTrait};
-    use sp_core::crypto::AccountId32;
     use tower::ServiceExt;
 
     async fn create_test_env(db: &DatabaseConnection) {
         let node = node::Entity::insert(node::ActiveModel {
             name: ActiveValue::Set(String::from("test")),
             url: ActiveValue::Set(String::from("ws://localhost:9944")),
-            schema: ActiveValue::Set(String::from("test")),
             confirmed_block: ActiveValue::Set(0),
             ..Default::default()
         })

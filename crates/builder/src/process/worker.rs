@@ -1,18 +1,19 @@
-use std::{convert::identity, io, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 
 use bollard::Docker;
 use common::{config, hash, s3};
 use db::{
-    build_session, build_session_token, code,
+    build_session::{self, ProcessedBuildSession},
+    build_session_token, code,
     sea_query::{LockBehavior, LockType, OnConflict},
-    source_code, ActiveValue, ColumnTrait, DatabaseConnection, DbErr, EntityTrait, QueryFilter,
-    QuerySelect, TransactionErrorExt, TransactionTrait,
+    source_code, ActiveValue, ColumnTrait, DatabaseConnection, DatabaseTransaction, DbErr,
+    EntityTrait, QueryFilter, QuerySelect, TransactionErrorExt, TransactionTrait,
 };
 use derive_more::{Display, Error, From};
-use futures_util::{pin_mut, StreamExt};
+use futures_util::{pin_mut, StreamExt, TryFutureExt};
 use itertools::Itertools;
 use tokio::{sync::mpsc::UnboundedSender, time::timeout};
-use tracing::{error, info, instrument};
+use tracing::{debug, error, instrument};
 
 use crate::{
     log_collector::LogEntry,
@@ -20,7 +21,7 @@ use crate::{
 };
 
 use super::{
-    container::{ContainerRemoveError, DownloadFromContainerError, Environment},
+    container::{ContainerRemoveError, DownloadFromContainerError, Image},
     volume::VolumeError,
 };
 
@@ -35,26 +36,6 @@ const UPDATE_PERIOD: Duration = Duration::from_secs(5);
 pub(crate) enum WorkerError {
     /// Database-related error.
     DatabaseError(DbErr),
-
-    /// Docker-related error.
-    DockerError(bollard::errors::Error),
-
-    /// IO-related error.
-    IoError(io::Error),
-
-    /// S3 storage-related error.
-    S3Error(s3::Error),
-
-    /// Volume-related error.
-    VolumeError(VolumeError),
-
-    /// Unable to acquire a [build session token](db::build_session_token)
-    #[display(fmt = "missing build session token")]
-    MissingBuildSessionToken,
-
-    /// Unable to find a [source code](db::source_code) related to the current build session.
-    #[display(fmt = "missing source code")]
-    MissingSourceCode,
 }
 
 /// Spawn a worker that will handle incoming build sessions.
@@ -86,7 +67,6 @@ pub(crate) async fn spawn(
                         .columns([
                             build_session::Column::Id,
                             build_session::Column::SourceCodeId,
-                            build_session::Column::RustcVersion,
                             build_session::Column::CargoContractVersion,
                         ])
                         .filter(build_session::Column::Status.eq(build_session::Status::New));
@@ -101,67 +81,26 @@ pub(crate) async fn spawn(
                         .one(txn)
                         .await?
                     {
-                        let archive_hash =
-                            source_code::Entity::find_by_id(build_session.source_code_id)
-                                .select_only()
-                                .column(source_code::Column::ArchiveHash)
-                                .into_tuple::<Vec<u8>>()
-                                .one(txn)
-                                .await?
-                                .ok_or(WorkerError::MissingSourceCode)?;
-
-                        let token = build_session_token::Entity::find()
-                            .select_only()
-                            .column(build_session_token::Column::Token)
-                            .filter(
-                                build_session_token::Column::BuildSessionId.eq(build_session.id),
-                            )
-                            .into_tuple::<String>()
-                            .one(txn)
-                            .await?
-                            .ok_or(WorkerError::MissingBuildSessionToken)?;
-
-                        let source_code_url = s3::ConfiguredClient::new(&storage_config)
-                            .await
-                            .get_source_code(&archive_hash)
-                            .await?;
-
-                        let volume =
-                            Volume::new(&builder_config.images_path, &builder_config.volume_size)
-                                .await?;
-
-                        let container = Container::new(
-                            &builder_config,
-                            &docker,
-                            volume,
-                            Environment {
-                                build_session_token: &token,
-                                rustc_version: &build_session.rustc_version,
-                                cargo_contract_version: &build_session.cargo_contract_version,
-                                source_code_url: source_code_url.uri(),
-                                api_server_url: &builder_config.api_server_url,
-                            },
-                        )
-                        .await?;
-
                         let mut wasm_buf = vec![0; builder_config.wasm_size_limit];
                         let mut metadata_buf = vec![0; builder_config.metadata_size_limit];
 
-                        match timeout(
-                            Duration::from_secs(builder_config.max_build_duration),
-                            handle_session(
-                                log_sender,
-                                build_session.id,
-                                &container,
+                        let val = |wasm_buf, metadata_buf| async {
+                            Instance::new(
+                                &build_session,
+                                &builder_config,
                                 &docker,
-                                &mut wasm_buf,
-                                &mut metadata_buf,
-                            ),
-                        )
-                        .await
-                        .map_err(|_| SessionError::TimedOut)
-                        .and_then(identity)
-                        {
+                                &storage_config,
+                                txn,
+                            )
+                            .unarchive()
+                            .await?
+                            .build(log_sender)
+                            .await?
+                            .get_files(wasm_buf, metadata_buf)
+                            .await
+                        };
+
+                        match val(&mut wasm_buf, &mut metadata_buf).await {
                             Ok((wasm, metadata)) => {
                                 let code_hash = hash::blake2(wasm);
 
@@ -191,9 +130,7 @@ pub(crate) async fn spawn(
                                 .exec_without_returning(txn)
                                 .await?;
                             }
-                            Err(err) => {
-                                info!(id = %build_session.id, ?err, "build session error");
-
+                            Err(_) => {
                                 build_session::Entity::update_many()
                                     .filter(build_session::Column::Id.eq(build_session.id))
                                     .col_expr(
@@ -203,10 +140,6 @@ pub(crate) async fn spawn(
                                     .exec(txn)
                                     .await?;
                             }
-                        }
-
-                        if let Err(err) = container.remove(&docker).await {
-                            error!(?err, "unable to delete container");
                         }
 
                         Ok(false)
@@ -230,8 +163,14 @@ pub(crate) async fn spawn(
 /// and are usually caused by an incorrect user input.
 #[derive(Debug, Display, Error, From)]
 enum SessionError {
+    /// Database-related error.
+    DatabaseError(DbErr),
+
     /// Docker-related error.
     DockerError(bollard::errors::Error),
+
+    /// S3 storage-related error.
+    S3Error(s3::Error),
 
     /// Volume-related error.
     VolumeError(VolumeError),
@@ -242,6 +181,14 @@ enum SessionError {
     /// Unable to download files from the container.
     DownloadFromContainerError(DownloadFromContainerError),
 
+    /// Unable to acquire a [build session token](db::build_session_token)
+    #[display(fmt = "missing build session token")]
+    MissingBuildSessionToken,
+
+    /// Unable to find a [source code](db::source_code) related to the current build session.
+    #[display(fmt = "missing source code")]
+    MissingSourceCode,
+
     /// Container finished its execution with a status code.
     #[display(fmt = "container exited with status code {}", _0)]
     ContainerExited(#[error(not(source))] i64),
@@ -251,20 +198,285 @@ enum SessionError {
     TimedOut,
 }
 
+/// Archived build session instance.
+struct Instance<'a> {
+    /// Inner build session database record.
+    build_session: &'a ProcessedBuildSession,
+    /// Builder component configuration.
+    builder_config: &'a config::Builder,
+    /// Docker RPC client.
+    docker: &'a Docker,
+    /// AWS S3 storage configuration.
+    storage_config: &'a config::Storage,
+    /// Current database transaction.
+    txn: &'a DatabaseTransaction,
+}
+
+impl<'a> Instance<'a> {
+    /// Create new build session [`Instance`].
+    fn new(
+        build_session: &'a ProcessedBuildSession,
+        builder_config: &'a config::Builder,
+        docker: &'a Docker,
+        storage_config: &'a config::Storage,
+        txn: &'a DatabaseTransaction,
+    ) -> Self {
+        Instance {
+            build_session,
+            builder_config,
+            docker,
+            storage_config,
+            txn,
+        }
+    }
+
+    /// Unarchive user-provided files using a separately launched container instance.
+    ///
+    /// This method returns [`UnarchivedInstance`], which can be used to start the build process itself.
+    #[instrument(skip(self), fields(id = %self.build_session.id), err(level = "info"))]
+    async fn unarchive(self) -> Result<UnarchivedInstance<'a>, SessionError> {
+        let archive_hash = source_code::Entity::find_by_id(self.build_session.source_code_id)
+            .select_only()
+            .column(source_code::Column::ArchiveHash)
+            .into_tuple::<Vec<u8>>()
+            .one(self.txn)
+            .await?
+            .ok_or(SessionError::MissingSourceCode)?;
+
+        let token = build_session_token::Entity::find()
+            .select_only()
+            .column(build_session_token::Column::Token)
+            .filter(build_session_token::Column::BuildSessionId.eq(self.build_session.id))
+            .into_tuple::<String>()
+            .one(self.txn)
+            .await?
+            .ok_or(SessionError::MissingBuildSessionToken)?;
+
+        let source_code_url = s3::ConfiguredClient::new(self.storage_config)
+            .await
+            .get_source_code(&archive_hash)
+            .await?;
+
+        debug!("creating new volume for build session");
+
+        let volume = Volume::new(
+            &self.builder_config.images_path,
+            &self.builder_config.volume_size,
+        )
+        .await?;
+
+        debug!("spawning container for the unarchiving process");
+
+        let container = match Container::new(
+            self.builder_config,
+            self.docker,
+            volume,
+            &format!("unarchive-{}", self.build_session.id),
+            Image::Unarchive,
+            Some(vec![
+                &format!("BUILD_SESSION_TOKEN={token}"),
+                &format!("SOURCE_CODE_URL={}", source_code_url.uri()),
+                &format!("API_SERVER_URL={}", self.builder_config.api_server_url),
+            ]),
+        )
+        .await
+        {
+            Ok(container) => container,
+            Err((err, volume)) => {
+                volume.close().await?;
+                return Err(err.into());
+            }
+        };
+
+        let volume = wait_and_remove(container, self.docker, self.builder_config).await?;
+
+        debug!("unarchiving process completed successfully");
+
+        Ok(UnarchivedInstance {
+            build_session: self.build_session,
+            builder_config: self.builder_config,
+            docker: self.docker,
+            volume,
+        })
+    }
+}
+
+/// Build session instance with unarchived user files.
+struct UnarchivedInstance<'a> {
+    /// Inner build session database record.
+    build_session: &'a ProcessedBuildSession,
+    /// Builder component configuration.
+    builder_config: &'a config::Builder,
+    /// Docker RPC client.
+    docker: &'a Docker,
+    /// Inner volume with unarchived source code.
+    volume: Volume,
+}
+
+impl<'a> UnarchivedInstance<'a> {
+    /// Start build process for the current build session instance.
+    #[instrument(skip(self, log_sender), fields(id = %self.build_session.id), err(level = "info"))]
+    pub async fn build(
+        self,
+        log_sender: UnboundedSender<LogEntry>,
+    ) -> Result<BuiltInstance<'a>, SessionError> {
+        debug!("spawning container for building purposes");
+
+        let container = match Container::new(
+            self.builder_config,
+            self.docker,
+            self.volume,
+            &format!("build-session-{}", self.build_session.id),
+            Image::Build {
+                version: &self.build_session.cargo_contract_version,
+            },
+            None,
+        )
+        .await
+        {
+            Ok(container) => container,
+            Err((err, volume)) => {
+                volume.close().await?;
+                return Err(err.into());
+            }
+        };
+
+        let volume = handle_session(
+            log_sender,
+            self.build_session.id,
+            container,
+            self.docker,
+            self.builder_config,
+        )
+        .await?;
+
+        debug!("container built successfully");
+
+        Ok(BuiltInstance {
+            build_session: self.build_session,
+            builder_config: self.builder_config,
+            docker: self.docker,
+            volume,
+        })
+    }
+}
+
+/// Build session with WASM and metadata artifacts available
+struct BuiltInstance<'a> {
+    /// Inner build session database record.
+    build_session: &'a ProcessedBuildSession,
+    /// Builder component configuration.
+    builder_config: &'a config::Builder,
+    /// Docker RPC client.
+    docker: &'a Docker,
+    /// Inner volume with unarchived source code.
+    volume: Volume,
+}
+
+impl<'a> BuiltInstance<'a> {
+    /// Rename artifacts files and write them into the provided buffers.
+    ///
+    /// This methods returns an [`Err`] if the provided buffers are insufficient in size to write
+    /// build artifacts.
+    #[instrument(skip(self, wasm_buf, metadata_buf), fields(id = %self.build_session.id), err(level = "info"))]
+    async fn get_files<'b>(
+        self,
+        wasm_buf: &'b mut [u8],
+        metadata_buf: &'b mut [u8],
+    ) -> Result<(&'b [u8], &'b [u8]), SessionError> {
+        debug!("spawning container for file rename purposes");
+
+        let container = match Container::new(
+            self.builder_config,
+            self.docker,
+            self.volume,
+            &format!("move-{}", self.build_session.id),
+            Image::Move,
+            None,
+        )
+        .await
+        {
+            Ok(container) => container,
+            Err((err, volume)) => {
+                volume.close().await?;
+                return Err(err.into());
+            }
+        };
+
+        let outcome = wait(&container, self.docker, self.builder_config)
+            .and_then(|_| async {
+                let wasm = container.wasm_file(self.docker, wasm_buf).await?;
+                let metadata = container.metadata_file(self.docker, metadata_buf).await?;
+
+                debug!(
+                    wasm_size = %wasm.len(),
+                    metadata_size = %metadata.len(),
+                    "retrieved WASM blob and JSON metadata successfully"
+                );
+
+                Ok((wasm, metadata))
+            })
+            .await;
+
+        container.remove(self.docker).await?.close().await?;
+
+        outcome
+    }
+}
+
+/// Wait for the provided [`Container`] to finish running.
+///
+/// This function returns an [`Err`] if container returns non-zero exit code.
+async fn wait(
+    container: &Container,
+    docker: &Docker,
+    builder_config: &config::Builder,
+) -> Result<(), SessionError> {
+    match timeout(
+        Duration::from_secs(builder_config.max_build_duration),
+        container.events(docker).next(),
+    )
+    .await
+    .map_err(|_| SessionError::TimedOut)?
+    {
+        Some(Ok(_)) | None => Ok(()),
+        Some(Err(bollard::errors::Error::DockerContainerWaitError { code, .. })) => {
+            Err(SessionError::ContainerExited(code))
+        }
+        Some(Err(err)) => Err(err.into()),
+    }
+}
+
+/// Wait for the provided [`Container`] to finish running and automatically delete it afterwards.
+///
+/// If an error occurs during the deletion process, this function will automatically attempt to close the backing [`Volume`].
+async fn wait_and_remove(
+    container: Container,
+    docker: &Docker,
+    builder_config: &config::Builder,
+) -> Result<Volume, SessionError> {
+    let outcome = wait(&container, docker, builder_config).await;
+
+    let volume = container.remove(docker).await?;
+
+    if let Err(err) = outcome {
+        volume.close().await?;
+        Err(err)
+    } else {
+        Ok(volume)
+    }
+}
+
 /// Handle a single build session.
 ///
-/// Returns a tuple of WASM blob bytes and JSON metadata bytes if the
-/// contract build is successful, [`SessionError`] otherwise.
+/// Returns the backing volume with WASM and metadata artifacts, [`SessionError`] otherwise.
 async fn handle_session<'a>(
     log_sender: UnboundedSender<LogEntry>,
     build_session_id: i64,
-    container: &Container,
+    container: Container,
     docker: &Docker,
-    wasm_buf: &'a mut [u8],
-    metadata_buf: &'a mut [u8],
-) -> Result<(&'a [u8], &'a [u8]), SessionError> {
-    let mut events = container.events(docker);
-
+    builder_config: &config::Builder,
+) -> Result<Volume, SessionError> {
     let logs = tokio_stream::StreamExt::chunks_timeout(
         container.logs(docker).await?,
         10,
@@ -272,6 +484,10 @@ async fn handle_session<'a>(
     );
 
     pin_mut!(logs);
+
+    let wait_future = wait_and_remove(container, docker, builder_config);
+
+    pin_mut!(wait_future);
 
     loop {
         tokio::select! {
@@ -290,17 +506,8 @@ async fn handle_session<'a>(
                     error!(%e, "unable to send log entry")
                 }
             },
-            Some(event) = events.next() => match event {
-                Ok(_) => {
-                    let wasm = container.wasm_file(docker, wasm_buf).await?;
-                    let metadata = container.metadata_file(docker, metadata_buf).await?;
-
-                    return Ok((wasm, metadata));
-                },
-                Err(bollard::errors::Error::DockerContainerWaitError { code, .. }) => {
-                    return Err(SessionError::ContainerExited(code));
-                },
-                Err(err) => return Err(err.into())
+            val = &mut wait_future => {
+                return val;
             }
         }
     }

@@ -6,6 +6,7 @@ use axum::{
     Extension, Json,
 };
 use axum_derive_error::ErrorResponse;
+use common::rpc::sp_core::crypto::AccountId32;
 use db::{
     public_key, ColumnTrait, DatabaseConnection, DbErr, EntityTrait, QueryFilter, QuerySelect,
 };
@@ -13,7 +14,6 @@ use derive_more::{Display, Error, From};
 use futures_util::TryStreamExt;
 use schemars::JsonSchema;
 use serde::Serialize;
-use sp_core::crypto::AccountId32;
 
 use crate::{auth::AuthenticatedUserId, pagination::Pagination};
 

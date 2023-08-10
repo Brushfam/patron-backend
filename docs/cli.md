@@ -26,11 +26,10 @@ The build process itself is done on a remote server, but the deployment process 
 safe and to facilitate possible air-gapped deployments.
 
 First of all, you need to create a `Deploy.toml` file at the root of your contract source code.
-This file describes the Rust toolchain and `cargo-contract` versions that will be used during the build:
+This file describes the `cargo-contract` version that will be used during the build:
 
 ```toml
-rustc_version = "1.69.0"
-cargo_contract_version = "3.0.1"
+cargo_contract_version = "3.1.0"
 ```
 
 You can check this file into your VCS to share the same configuration with your development team.
@@ -60,3 +59,13 @@ patron deploy new --suri //Alice -- --password 123
 ```
 
 To get more information, invoke the deploy command with the `--help` flag.
+
+## Build
+
+You can also acquire contract's WASM blob and JSON metadata files without the deployment itself
+by using the `build` subcommand which, by default, outputs `contract.wasm` and `contract.json` files
+to the `./target/ink` directory.
+
+You can modify the output directory with `--wasm_path` and `--metadata_path` flags.
+
+See `--help` flag output for more information.

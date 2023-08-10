@@ -10,6 +10,7 @@ use bollard::{
         LogOutput, RemoveContainerOptions,
     },
     errors::Error,
+    image::{CreateImageOptions, ListImagesOptions},
     service::MountTypeEnum,
     service::{
         ContainerWaitResponse, HostConfig, Mount, MountVolumeOptions,
@@ -20,6 +21,7 @@ use bollard::{
 use common::config;
 use derive_more::{Display, Error, From};
 use futures_util::{Stream, TryStreamExt};
+use tracing::info;
 
 use crate::process::volume::{Volume, VolumeError};
 
@@ -51,6 +53,31 @@ pub enum DownloadFromContainerError {
     FileNotFound,
 }
 
+/// Supported container images.
+pub enum Image<'a> {
+    /// Unarchive image, produced using Nix.
+    Unarchive,
+
+    /// Build image, automatically downloaded from Docker registry.
+    Build {
+        /// `cargo-contract` version to use during image download process.
+        version: &'a str,
+    },
+
+    /// Artifact rename image, produced using Nix.
+    Move,
+}
+
+impl<'a> fmt::Display for Image<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Image::Unarchive => write!(f, "stage-unarchive"),
+            Image::Build { version } => write!(f, "paritytech/contracts-verifiable:{version}"),
+            Image::Move => write!(f, "stage-move"),
+        }
+    }
+}
+
 /// A single running Docker container instance.
 pub struct Container {
     /// Docker-specific container identifier.
@@ -60,32 +87,16 @@ pub struct Container {
     volume: Volume,
 }
 
-/// Container environment variables.
-pub struct Environment<'a, U: fmt::Display> {
-    /// Build session file upload token.
-    pub build_session_token: &'a str,
-
-    /// Rust toolchain version used to build the contract.
-    pub rustc_version: &'a str,
-
-    /// `cargo-contract` version used to build the contract.
-    pub cargo_contract_version: &'a str,
-
-    /// S3 pre-signed URL to the source code archive.
-    pub source_code_url: U,
-
-    /// API server URL used to upload the source code archive contents.
-    pub api_server_url: &'a str,
-}
-
 impl Container {
     /// Spawn new Docker container with the provided configuration.
-    pub async fn new<U: fmt::Display>(
+    pub async fn new(
         config: &config::Builder,
         client: &Docker,
         volume: Volume,
-        env: Environment<'_, U>,
-    ) -> Result<Self, Error> {
+        name: &str,
+        image: Image<'_>,
+        env: Option<Vec<&str>>,
+    ) -> Result<Self, (Error, Volume)> {
         // Attempt to isolate container as much as possible.
         //
         // The provided container configuration should protect
@@ -99,7 +110,7 @@ impl Container {
             memory_swap: Some(config.memory_swap_limit),
             // Mount the passed volume as a home directory of a root user.
             mounts: Some(vec![Mount {
-                target: Some(String::from("/root")),
+                target: Some(String::from("/contract")),
                 typ: Some(MountTypeEnum::VOLUME),
                 volume_options: Some(MountVolumeOptions {
                     driver_config: Some(MountVolumeOptionsDriverConfig {
@@ -118,33 +129,43 @@ impl Container {
             ..Default::default()
         };
 
-        let container = client
+        let image_str = image.to_string();
+
+        let cmd = if let Image::Build { .. } = image {
+            if let Err(err) = Self::ensure_image_exists(client, &image_str).await {
+                return Err((err, volume));
+            }
+
+            Some(vec!["build", "--release"])
+        } else {
+            None
+        };
+
+        let container = match client
             .create_container(
                 Some(CreateContainerOptions {
-                    name: env.build_session_token,
-                    ..Default::default()
+                    name,
+                    platform: Some("linux/amd64"),
                 }),
                 Config {
-                    image: Some("ink-builder"),
-                    // Pass information about the current build session to container
-                    env: Some(vec![
-                        &format!("SOURCE_CODE_URL={}", env.source_code_url),
-                        &format!("CARGO_CONTRACT_VERSION={}", env.cargo_contract_version),
-                        &format!("RUST_VERSION={}", env.rustc_version),
-                        &format!("BUILD_SESSION_TOKEN={}", env.build_session_token),
-                        &format!("API_SERVER_URL={}", env.api_server_url),
-                    ]),
+                    image: Some(&*image_str),
+                    cmd,
+                    env,
                     host_config: Some(host_config),
                     attach_stdout: Some(true),
                     attach_stderr: Some(true),
                     ..Default::default()
                 },
             )
-            .await?;
+            .await
+        {
+            Ok(container) => container,
+            Err(err) => return Err((err, volume)),
+        };
 
-        client
-            .start_container::<String>(&container.id, None)
-            .await?;
+        if let Err(err) = client.start_container::<String>(&container.id, None).await {
+            return Err((err, volume));
+        }
 
         Ok(Self {
             id: container.id,
@@ -181,7 +202,7 @@ impl Container {
         client: &Docker,
         buf: &'a mut [u8],
     ) -> Result<&'a [u8], DownloadFromContainerError> {
-        self.download_from_container_to_buf(client, "/root/artifacts/ink/main.wasm", buf)
+        self.download_from_container_to_buf(client, "/contract/target/ink/main.wasm", buf)
             .await
     }
 
@@ -193,7 +214,7 @@ impl Container {
         client: &Docker,
         buf: &'a mut [u8],
     ) -> Result<&'a [u8], DownloadFromContainerError> {
-        self.download_from_container_to_buf(client, "/root/artifacts/ink/main.json", buf)
+        self.download_from_container_to_buf(client, "/contract/target/ink/main.json", buf)
             .await
     }
 
@@ -205,8 +226,8 @@ impl Container {
         client.wait_container::<String>(&self.id, None)
     }
 
-    /// Remove the current Docker container and close the related [`Volume`].
-    pub async fn remove(self, client: &Docker) -> Result<(), ContainerRemoveError> {
+    /// Remove the current Docker container and retrieve the inner [`Volume`] value.
+    pub async fn remove(self, client: &Docker) -> Result<Volume, ContainerRemoveError> {
         client
             .remove_container(
                 &self.id,
@@ -218,7 +239,36 @@ impl Container {
             )
             .await?;
 
-        self.volume.close().await?;
+        Ok(self.volume)
+    }
+
+    /// Ensure that the image with the provided name exists.
+    ///
+    /// If it doesn't, an attempt to pull it from Docker registry will be made.
+    pub async fn ensure_image_exists(client: &Docker, image: &str) -> Result<(), Error> {
+        let list = client
+            .list_images(Some(ListImagesOptions {
+                filters: HashMap::from([("reference", vec![image])]),
+                ..Default::default()
+            }))
+            .await?;
+
+        if list.is_empty() {
+            info!(%image, "downloading missing docker image");
+
+            client
+                .create_image(
+                    Some(CreateImageOptions {
+                        from_image: image,
+                        ..Default::default()
+                    }),
+                    None,
+                    None,
+                )
+                .map_ok(|_| ())
+                .try_collect::<()>()
+                .await?;
+        }
 
         Ok(())
     }

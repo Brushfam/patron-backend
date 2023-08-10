@@ -1,8 +1,6 @@
-use common::rpc::subxt::{
-    self,
-    client::OnlineClientT,
-    rpc::types::{BlockNumber, NumberOrHex},
-    Config,
+use common::rpc::{
+    sp_core::H256,
+    substrate_api_client::{ac_primitives::PolkadotConfig, rpc::Request, Api, Error, GetChainInfo},
 };
 use futures_util::{stream, Stream, StreamExt, TryStreamExt};
 
@@ -37,21 +35,15 @@ pub(crate) fn extract_code_hash<T: AsRef<[u8]>>(key: T) -> Vec<u8> {
 /// Get a mapping stream from block number to block hash.
 ///
 /// The stream may skip blocks, to which an RPC node did not provide a hash.
-pub(crate) fn block_mapping_stream<
-    'a,
-    I: IntoIterator<Item = u64> + 'a,
-    T: Config,
-    C: OnlineClientT<T>,
->(
+pub(crate) fn block_mapping_stream<'a, I: IntoIterator<Item = u32> + 'a, C: Request>(
     range: I,
-    api: &'a C,
-) -> impl Stream<Item = Result<(u64, T::Hash), subxt::Error>> + 'a {
+    api: &'a Api<PolkadotConfig, C>,
+) -> impl Stream<Item = Result<(u32, H256), Error>> + 'a {
     stream::iter(range.into_iter())
         .map(Ok)
         .try_filter_map(move |block_number| async move {
             Ok(api
-                .rpc()
-                .block_hash(Some(BlockNumber::from(NumberOrHex::from(block_number))))
+                .get_block_hash(Some(block_number))
                 .await?
                 .map(|hash| (block_number, hash)))
         })
@@ -59,9 +51,9 @@ pub(crate) fn block_mapping_stream<
 
 #[cfg(test)]
 mod tests {
-    use common::rpc::subxt::ext::{
-        sp_core::ByteArray,
-        sp_runtime::{app_crypto::Ss58Codec, AccountId32},
+    use common::rpc::sp_core::{
+        crypto::{AccountId32, Ss58Codec},
+        ByteArray,
     };
 
     #[test]

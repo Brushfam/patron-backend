@@ -8,6 +8,9 @@
 //! Request body size limiting is necessary to ensure that you don't get overwhelmed with
 //! source code archive uploads while using a self-hosted environment.
 
+#![deny(missing_docs)]
+#![deny(clippy::missing_docs_in_private_items)]
+
 /// API authentication middleware and helpers.
 mod auth;
 
@@ -44,7 +47,7 @@ use tracing::info;
 /// API server entrypoint.
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
-    let config = Config::new()?;
+    let config = Config::new(None)?;
 
     logging::init(&config);
 

@@ -3,6 +3,7 @@ use std::sync::Arc;
 use aide::{transform::TransformOperation, OperationIo};
 use axum::{extract::State, Extension, Json};
 use axum_derive_error::ErrorResponse;
+use common::rpc::sp_core::sr25519::Public;
 use db::{
     public_key, ColumnTrait, DatabaseConnection, DbErr, EntityTrait, QueryFilter,
     TransactionErrorExt, TransactionTrait,
@@ -10,7 +11,6 @@ use db::{
 use derive_more::{Display, Error, From};
 use schemars::JsonSchema;
 use serde::Deserialize;
-use sp_core::sr25519::Public;
 
 use crate::auth::AuthenticatedUserId;
 
@@ -73,9 +73,9 @@ mod tests {
         http::{Request, StatusCode},
     };
     use common::config::Config;
+    use common::rpc::sp_core::crypto::{AccountId32, Ss58Codec};
     use db::{public_key, token, user, ActiveValue, DatabaseConnection, EntityTrait};
     use serde_json::json;
-    use sp_core::crypto::{AccountId32, Ss58Codec};
     use tower::Service;
 
     const ACCOUNT_ID: &str = "5FeLhJAs4CUHqpWmPDBLeL7NLAoHsB2ZuFZ5Mk62EgYemtFj";

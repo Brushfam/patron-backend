@@ -109,9 +109,6 @@ impl AuthenticationConfig {
 pub struct ProjectConfig {
     /// `cargo-contract` package version.
     pub cargo_contract_version: String,
-
-    /// Rust toolchain version.
-    pub rustc_version: String,
 }
 
 impl ProjectConfig {

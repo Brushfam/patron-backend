@@ -34,6 +34,9 @@
 //!
 //! See [`log_collector`] for more details.
 
+#![deny(missing_docs)]
+#![deny(clippy::missing_docs_in_private_items)]
+
 /// CLI configuration and available subcommands.
 mod cli;
 
@@ -55,7 +58,9 @@ use tracing::info;
 /// Smart contract builder entrypoint.
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
-    let config = Config::new()?;
+    let cli = Cli::parse();
+
+    let config = Config::new(cli.config)?;
 
     logging::init(&config);
 
@@ -67,7 +72,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let database = Database::connect(&config.database.url).await?;
     info!("database connection established");
 
-    match Cli::parse().command {
+    match cli.command {
         Command::Serve => commands::serve(builder_config, config.storage, database).await?,
     }
 
