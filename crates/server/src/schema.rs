@@ -41,7 +41,7 @@ pub(crate) fn example_error<E: Display + IntoResponse>(err: E) -> Value {
 generate_examples!(
     database_identifier, i64, 1;
     hex_hash, HexHash, HexHash([200; 32]);
-    cargo_contract_version, String, String::from("3.0.1");
+    cargo_contract_version, String, String::from("4.0.0-alpha");
     build_session_status, build_session::Status, build_session::Status::Completed;
     log_position, Option<i64>, Some(40);
     log_entry, String, String::from("Compiling futures-util v0.3.28");

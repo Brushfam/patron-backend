@@ -166,9 +166,19 @@ pub struct Config {
     /// Storage configuration.
     pub storage: Storage,
 
+    /// Supported cargo-contract tooling versions.
+    ///
+    /// Docker Hub tags can be used for reference.
+    #[serde(default = "default_supported_cargo_contract_versions")]
+    pub supported_cargo_contract_versions: Vec<String>,
+
     /// Enable payments support.
     #[serde(default = "default_payments")]
     pub payments: bool,
+}
+
+fn default_supported_cargo_contract_versions() -> Vec<String> {
+    vec![String::from("4.0.0-alpha"), String::from("3.1.0")]
 }
 
 fn default_payments() -> bool {
@@ -207,6 +217,7 @@ impl Config {
                 endpoint_url: String::new(),
                 source_code_bucket: String::new(),
             },
+            supported_cargo_contract_versions: default_supported_cargo_contract_versions(),
             payments: false,
         }
     }

@@ -22,10 +22,12 @@ pub enum ServeError {
 pub async fn serve(
     builder_config: config::Builder,
     storage_config: config::Storage,
+    supported_cargo_contract_versions: Vec<String>,
     database: DatabaseConnection,
 ) -> Result<(), Error> {
     let builder_config = Arc::new(builder_config);
     let storage_config = Arc::new(storage_config);
+    let supported_cargo_contract_versions = Arc::new(supported_cargo_contract_versions);
     let docker = Arc::new(Docker::connect_with_socket_defaults()?);
     let database = Arc::new(database);
 
@@ -40,6 +42,7 @@ pub async fn serve(
             tokio::spawn(worker::spawn(
                 builder_config.clone(),
                 storage_config.clone(),
+                supported_cargo_contract_versions.clone(),
                 docker.clone(),
                 database.clone(),
                 sender.clone(),

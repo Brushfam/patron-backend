@@ -49,6 +49,7 @@ pub(crate) enum WorkerError {
 pub(crate) async fn spawn(
     builder_config: Arc<config::Builder>,
     storage_config: Arc<config::Storage>,
+    supported_cargo_contract_versions: Arc<Vec<String>>,
     docker: Arc<Docker>,
     db: Arc<DatabaseConnection>,
     log_sender: UnboundedSender<LogEntry>,
@@ -58,6 +59,7 @@ pub(crate) async fn spawn(
             .transaction::<_, _, WorkerError>(|txn| {
                 let builder_config = builder_config.clone();
                 let storage_config = storage_config.clone();
+                let supported_cargo_contract_versions = supported_cargo_contract_versions.clone();
                 let docker = docker.clone();
                 let log_sender = log_sender.clone();
 
@@ -94,7 +96,7 @@ pub(crate) async fn spawn(
                             )
                             .unarchive()
                             .await?
-                            .build(log_sender)
+                            .build(log_sender, &supported_cargo_contract_versions)
                             .await?
                             .get_files(wasm_buf, metadata_buf)
                             .await
@@ -196,6 +198,10 @@ enum SessionError {
     /// Container ran out of time to complete the build.
     #[display(fmt = "container timed out")]
     TimedOut,
+
+    /// Unsupported cargo-contract version.
+    #[display(fmt = "unsupported cargo-contract version")]
+    UnsupportedCargoContractVersion,
 }
 
 /// Archived build session instance.
@@ -319,8 +325,34 @@ impl<'a> UnarchivedInstance<'a> {
     pub async fn build(
         self,
         log_sender: UnboundedSender<LogEntry>,
+        supported_cargo_contract_versions: &[String],
     ) -> Result<BuiltInstance<'a>, SessionError> {
         debug!("spawning container for building purposes");
+
+        if !supported_cargo_contract_versions.contains(&self.build_session.cargo_contract_version) {
+            let result = log_sender
+                .send(LogEntry {
+                    build_session_id: self.build_session.id,
+                    text: String::from("Provided cargo-contract version is not supported.\n"),
+                })
+                .and_then(|_| {
+                    log_sender.send(LogEntry {
+                        build_session_id: self.build_session.id,
+                        text: format!(
+                            "Consider using version {}",
+                            supported_cargo_contract_versions.first().expect(
+                                "at least one cargo-contract version is expected to be supported"
+                            )
+                        ),
+                    })
+                });
+
+            if let Err(e) = result {
+                error!(%e, "unable to send log entry")
+            }
+
+            return Err(SessionError::UnsupportedCargoContractVersion);
+        }
 
         let container = match Container::new(
             self.builder_config,

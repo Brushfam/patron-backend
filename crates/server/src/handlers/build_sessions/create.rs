@@ -8,21 +8,13 @@ use db::{
     EntityTrait, QuerySelect, SelectExt, TransactionErrorExt, TransactionTrait,
 };
 use derive_more::{Display, Error, From};
-use once_cell::sync::Lazy;
-use regex::Regex;
 use schemars::JsonSchema;
+use semver::Version;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use validator::Validate;
+use validator::{Validate, ValidationError};
 
 use crate::{auth::AuthenticatedUserId, schema::example_error, validation::ValidatedJson};
-
-/// Regular expression to match stable versions of `cargo-contract`.
-///
-/// Currently, this regex does not support any nightly or unstable versions of the previously mentioned tooling.
-static VERSION_REGEX: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r#"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$"#).expect("invalid regex string")
-});
 
 /// Errors that may occur during the build session creation process.
 #[derive(ErrorResponse, Display, From, Error, OperationIo)]
@@ -50,9 +42,16 @@ pub(super) struct BuildSessionCreateRequest {
     source_code_id: i64,
 
     /// `cargo-contract` tooling version.
-    #[validate(regex = "VERSION_REGEX")]
+    #[validate(length(max = 32), custom = "validate_cargo_contract_version")]
     #[schemars(example = "crate::schema::example_cargo_contract_version")]
     cargo_contract_version: String,
+}
+
+/// Validate the provided cargo-contract version to be a valid Semver string.
+fn validate_cargo_contract_version(cargo_contract_version: &str) -> Result<(), ValidationError> {
+    Version::parse(cargo_contract_version)
+        .map(|_| ())
+        .map_err(|_| ValidationError::new("invalid cargo-contract version"))
 }
 
 /// JSON response body.

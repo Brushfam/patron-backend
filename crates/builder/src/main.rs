@@ -73,7 +73,15 @@ async fn main() -> Result<(), anyhow::Error> {
     info!("database connection established");
 
     match cli.command {
-        Command::Serve => commands::serve(builder_config, config.storage, database).await?,
+        Command::Serve => {
+            commands::serve(
+                builder_config,
+                config.storage,
+                config.supported_cargo_contract_versions,
+                database,
+            )
+            .await?
+        }
     }
 
     Ok(())
