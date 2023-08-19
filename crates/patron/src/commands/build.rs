@@ -70,6 +70,7 @@ pub(crate) fn build(
     let FinishedBuildSession {
         mut wasm_file,
         mut metadata_file,
+        code_hash,
         ..
     } = remote_build(
         &auth_config,
@@ -114,6 +115,12 @@ pub(crate) fn build(
         File::create(bundle_path.unwrap_or(PathBuf::from(DEFAULT_BUNDLE_PATH)))?,
         &metadata,
     )?;
+
+    progress.finish_with_message(format!(
+        "Contract uploaded: {}/codeHash/{}",
+        auth_config.web_path(),
+        code_hash
+    ));
 
     Ok(())
 }
