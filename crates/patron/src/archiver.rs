@@ -44,7 +44,10 @@ pub(crate) fn build_zip_archive<W: Write + Seek>(
 
     while let Some(entry) = entries.next().transpose()? {
         let Some(path) = entry.path().strip_prefix(&current_dir)?.to_str() else {
-            progress.println(format!("File {} contains non-unicode symbols in path", entry.path().display()));
+            progress.println(format!(
+                "File {} contains non-unicode symbols in path",
+                entry.path().display()
+            ));
             continue;
         };
 

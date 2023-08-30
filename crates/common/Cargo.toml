@@ -21,6 +21,7 @@ frame-metadata = { version = "15.1", default-features = false, features = ["v14"
 parity-scale-codec = { version = "3.6.3", optional = true }
 pallet-contracts = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43", default-features = false, optional = true }
 pallet-contracts-primitives = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43", default-features = false, optional = true }
+scale-decode = { version = "0.9.0", optional = true }
 sp-core = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43", default-features = false, optional = true }
 sp-version = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.43", default-features = false, optional = true }
 substrate-api-client = { git = "https://github.com/scs/substrate-api-client", branch = "polkadot-v0.9.43", default-features = false, features = ["jsonrpsee-client", "contracts-xt"], optional = true }
@@ -35,6 +36,7 @@ rpc = [
     "parity-scale-codec",
     "pallet-contracts",
     "pallet-contracts-primitives",
+    "scale-decode",
     "sp-core",
     "sp-version",
     "substrate-api-client"

@@ -5,6 +5,7 @@ use common::rpc::{
     sp_core::ByteArray,
     substrate_api_client::{
         self,
+        ac_node_api::Metadata,
         ac_primitives::{Block, Config, Header, PolkadotConfig},
         rpc::{HandleSubscription, JsonrpseeClient, Request},
         Api, GetChainInfo, SubscribeChain,
@@ -83,7 +84,8 @@ pub async fn watch(database: DatabaseConnection, name: String) -> Result<(), Wat
 
     while let Some(block) = stream.try_next().await? {
         debug!(block_number = %block.header().number(), "found a block to catch-up to");
-        node = process_block(node, &database, &api, block.header(), &mut metadata_cache).await?;
+        let metadata = metadata_cache.metadata(&api, block.hash()).await?;
+        node = process_block(node, &database, &api, block.header(), metadata).await?;
     }
 
     // Proceed with the subscription, since an attempt to traverse missed blocks was already made.
@@ -99,7 +101,8 @@ pub async fn watch(database: DatabaseConnection, name: String) -> Result<(), Wat
         .map_err(substrate_api_client::Error::RpcClient)?
     {
         debug!(block_number = %header.number(), "found new block");
-        node = process_block(node, &database, &api, &header, &mut metadata_cache).await?;
+        let metadata = metadata_cache.metadata(&api, header.hash()).await?;
+        node = process_block(node, &database, &api, &header, metadata).await?;
     }
 
     Ok(())
@@ -115,7 +118,7 @@ async fn process_block<C: Request>(
     database: &DatabaseConnection,
     api: &Api<PolkadotConfig, C>,
     block_header: &<PolkadotConfig as Config>::Header,
-    metadata_cache: &mut MetadataCache,
+    metadata: &Metadata,
 ) -> Result<node::Model, WatchError> {
     let mut active_node: node::ActiveModel = node.clone().into();
 
@@ -128,12 +131,12 @@ async fn process_block<C: Request>(
         .expect("invalid timestamp was provided");
     let block_timestamp = PrimitiveDateTime::new(offset_timestamp.date(), offset_timestamp.time());
 
-    let events = rpc::events(api, block_hash, metadata_cache).await?;
+    let events = rpc::events(api, block_hash, metadata.clone()).await?;
 
     let code_uploads = stream::iter(events.find::<CodeStored>())
         .err_into()
         .and_then(|CodeStored { code_hash }| async move {
-            rpc::pristine_code(api, block_hash, code_hash)
+            rpc::pristine_code(api, block_hash, code_hash, metadata)
                 .await
                 .map(|code| (code_hash.0, code))
         })
@@ -148,7 +151,7 @@ async fn process_block<C: Request>(
     let instantiations = stream::iter(events.find::<Instantiated>())
         .err_into()
         .and_then(|Instantiated { deployer, contract }| async move {
-            rpc::contract_info_of(api, block_hash, &contract)
+            rpc::contract_info_of(api, block_hash, &contract, metadata)
                 .await
                 .map(|info| (contract, deployer, info))
         })

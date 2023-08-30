@@ -74,7 +74,7 @@
           ];
         };
 
-        rustToolchain = pkgs.rust-bin.nightly."2023-05-22".default.override {
+        rustToolchain = pkgs.rust-bin.nightly."2023-08-28".default.override {
           extensions = [
             "rustc"
             "cargo"

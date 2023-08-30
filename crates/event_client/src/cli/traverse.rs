@@ -104,7 +104,9 @@ async fn parse_block<C: Request>(
     block_hash: H256,
     metadata_cache: &mut MetadataCache,
 ) -> Result<BlockData, Error> {
-    let events = rpc::events(api, block_hash, metadata_cache).await?;
+    let metadata = metadata_cache.metadata(api, block_hash).await?;
+
+    let events = rpc::events(api, block_hash, metadata.clone()).await?;
 
     let instantiations = events.find().try_collect()?;
 

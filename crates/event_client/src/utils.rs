@@ -39,7 +39,7 @@ pub(crate) fn block_mapping_stream<'a, I: IntoIterator<Item = u32> + 'a, C: Requ
     range: I,
     api: &'a Api<PolkadotConfig, C>,
 ) -> impl Stream<Item = Result<(u32, H256), Error>> + 'a {
-    stream::iter(range.into_iter())
+    stream::iter(range)
         .map(Ok)
         .try_filter_map(move |block_number| async move {
             Ok(api

@@ -4,6 +4,7 @@ use common::rpc::{
     self,
     sp_core::crypto::AccountId32,
     substrate_api_client::{self, ac_primitives::Block, rpc::JsonrpseeClient, Api},
+    MetadataCache,
 };
 use db::{
     code, contract, node, sea_query::OnConflict, ActiveValue, DatabaseConnection, DbErr,
@@ -50,11 +51,15 @@ pub async fn initialize(
     let client = JsonrpseeClient::new(&url).map_err(substrate_api_client::Error::RpcClient)?;
     let api = Api::new(client).await?;
 
+    let mut metadata_cache = MetadataCache::new();
+
     let latest_block = rpc::block(&api, None)
         .await?
         .expect("at least one block is expected");
 
     let block_hash = latest_block.hash();
+
+    let metadata = metadata_cache.metadata(&api, block_hash).await?;
 
     let payment_address = payment_address
         .as_deref()
@@ -91,7 +96,7 @@ pub async fn initialize(
         .await
         .into_raw_result()?;
 
-    let mut wasm_blobs = pin!(rpc::pristine_code_root(&api, block_hash).await?);
+    let mut wasm_blobs = pin!(rpc::pristine_code_root(&api, block_hash, metadata).await?);
 
     while let Some(chunk) = wasm_blobs.try_next().await? {
         database
@@ -118,7 +123,7 @@ pub async fn initialize(
             .into_raw_result()?;
     }
 
-    let mut contracts = pin!(rpc::contract_info_of_root(&api, block_hash).await?);
+    let mut contracts = pin!(rpc::contract_info_of_root(&api, block_hash, metadata).await?);
 
     while let Some(chunk) = contracts.try_next().await? {
         database
