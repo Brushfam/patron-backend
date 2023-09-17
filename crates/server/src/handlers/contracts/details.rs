@@ -140,8 +140,7 @@ mod tests {
         body::Body,
         http::{Request, StatusCode},
     };
-    use common::config::Config;
-    use common::rpc::sp_core::crypto::AccountId32;
+    use common::{config::Config, rpc::sp_core::crypto::AccountId32};
     use db::{code, contract, node, ActiveValue, DatabaseConnection, EntityTrait};
     use tower::ServiceExt;
 

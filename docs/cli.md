@@ -69,3 +69,20 @@ to the `./target/ink` directory.
 You can modify the output directory with `--wasm_path` and `--metadata_path` flags.
 
 See `--help` flag output for more information.
+
+## Watch
+
+File watch functionality allows you to simplify your build-deploy-interact cycle during the development process
+with an automatically refreshed contract caller and contract builder invoked on any meaningful file change.
+
+To start watching, provide the constructor name and `suri` to the `watch` subcommand:
+
+```sh
+patron watch new --suri //Alice
+```
+
+You can use almost any flag available in the [`deploy` subcommand](#deploy).
+
+File watcher will automatically deploy your contract using the provided configuration, so ensure that
+constructor ABI is the same between each re-build.
+

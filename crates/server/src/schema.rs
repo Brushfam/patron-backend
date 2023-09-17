@@ -59,5 +59,6 @@ generate_examples!(
         String::from("Cargo.toml"),
         String::from("Cargo.lock"),
     ];
+    folder, Option<String>, Some(String::from("contracts/test_contract"));
     node, String, String::from("alephzero")
 );

@@ -182,8 +182,10 @@ mod tests {
         body::Body,
         http::{Request, StatusCode},
     };
-    use common::config::Config;
-    use common::rpc::sp_core::crypto::{AccountId32, Ss58Codec};
+    use common::{
+        config::Config,
+        rpc::sp_core::crypto::{AccountId32, Ss58Codec},
+    };
     use db::{
         cli_token, public_key, token::TOKEN_LENGTH, user, ActiveValue, DatabaseConnection,
         EntityTrait,

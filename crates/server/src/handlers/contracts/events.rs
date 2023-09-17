@@ -82,8 +82,7 @@ mod tests {
 
     use assert_json::assert_json;
     use axum::{body::Body, http::Request};
-    use common::config::Config;
-    use common::rpc::sp_core::crypto::AccountId32;
+    use common::{config::Config, rpc::sp_core::crypto::AccountId32};
     use db::{
         code, contract, event, node, ActiveValue, DatabaseConnection, EntityTrait, OffsetDateTime,
         PrimitiveDateTime,

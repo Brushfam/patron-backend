@@ -1,4 +1,4 @@
-use std::{sync::Arc, time::Duration};
+use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use bollard::Docker;
 use common::{config, hash, s3};
@@ -12,6 +12,7 @@ use db::{
 use derive_more::{Display, Error, From};
 use futures_util::{pin_mut, StreamExt, TryFutureExt};
 use itertools::Itertools;
+use normalize_path::NormalizePath;
 use tokio::{sync::mpsc::UnboundedSender, time::timeout};
 use tracing::{debug, error, instrument};
 
@@ -70,6 +71,7 @@ pub(crate) async fn spawn(
                             build_session::Column::Id,
                             build_session::Column::SourceCodeId,
                             build_session::Column::CargoContractVersion,
+                            build_session::Column::ProjectDirectory,
                         ])
                         .filter(build_session::Column::Status.eq(build_session::Status::New));
 
@@ -284,6 +286,7 @@ impl<'a> Instance<'a> {
                 &format!("SOURCE_CODE_URL={}", source_code_url.uri()),
                 &format!("API_SERVER_URL={}", self.builder_config.api_server_url),
             ]),
+            None,
         )
         .await
         {
@@ -321,7 +324,7 @@ struct UnarchivedInstance<'a> {
 
 impl<'a> UnarchivedInstance<'a> {
     /// Start build process for the current build session instance.
-    #[instrument(skip(self, log_sender), fields(id = %self.build_session.id), err(level = "info"))]
+    #[instrument(skip(self, log_sender, supported_cargo_contract_versions), fields(id = %self.build_session.id), err(level = "info"))]
     pub async fn build(
         self,
         log_sender: UnboundedSender<LogEntry>,
@@ -354,6 +357,11 @@ impl<'a> UnarchivedInstance<'a> {
             return Err(SessionError::UnsupportedCargoContractVersion);
         }
 
+        let normalized_path =
+            normalize_working_dir(self.build_session.project_directory.as_deref())
+                .display()
+                .to_string();
+
         let container = match Container::new(
             self.builder_config,
             self.docker,
@@ -363,6 +371,7 @@ impl<'a> UnarchivedInstance<'a> {
                 version: &self.build_session.cargo_contract_version,
             },
             None,
+            Some(&normalized_path),
         )
         .await
         {
@@ -389,6 +398,7 @@ impl<'a> UnarchivedInstance<'a> {
             builder_config: self.builder_config,
             docker: self.docker,
             volume,
+            normalized_path,
         })
     }
 }
@@ -403,6 +413,8 @@ struct BuiltInstance<'a> {
     docker: &'a Docker,
     /// Inner volume with unarchived source code.
     volume: Volume,
+    /// Normalized project directory path value.
+    normalized_path: String,
 }
 
 impl<'a> BuiltInstance<'a> {
@@ -425,6 +437,7 @@ impl<'a> BuiltInstance<'a> {
             &format!("move-{}", self.build_session.id),
             Image::Move,
             None,
+            Some(&self.normalized_path),
         )
         .await
         {
@@ -437,8 +450,13 @@ impl<'a> BuiltInstance<'a> {
 
         let outcome = wait(&container, self.docker, self.builder_config)
             .and_then(|_| async {
-                let wasm = container.wasm_file(self.docker, wasm_buf).await?;
-                let metadata = container.metadata_file(self.docker, metadata_buf).await?;
+                let wasm = container
+                    .wasm_file(self.docker, &self.normalized_path, wasm_buf)
+                    .await?;
+
+                let metadata = container
+                    .metadata_file(self.docker, &self.normalized_path, metadata_buf)
+                    .await?;
 
                 debug!(
                     wasm_size = %wasm.len(),
@@ -524,10 +542,12 @@ async fn handle_session<'a>(
     loop {
         tokio::select! {
             Some(chunk) = logs.next() => {
-                let text = chunk.into_iter()
+                let text = strip_ansi_escapes::strip_str(
+                    chunk.into_iter()
                     .try_collect::<_, Vec<_>, _>()?
                     .into_iter()
-                    .join("");
+                    .join("")
+                );
 
                 let result = log_sender.send(LogEntry {
                     build_session_id,
@@ -543,4 +563,15 @@ async fn handle_session<'a>(
             }
         }
     }
+}
+
+/// Convert user-supplied `project_directory` path into a normalized [`PathBuf`] value.
+fn normalize_working_dir(project_directory: Option<&str>) -> PathBuf {
+    let mut path = PathBuf::from("/contract");
+
+    if let Some(project_directory) = project_directory {
+        path.push(project_directory);
+    }
+
+    path.normalize()
 }

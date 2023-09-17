@@ -1,22 +1,19 @@
-use std::{
-    io,
-    process::{Command, Stdio},
-};
+use std::{io, process::Stdio};
 
 use derive_more::{Display, Error, From};
 use indicatif::ProgressBar;
+use rand::{thread_rng, Rng};
+use tokio::process::Command;
 
 use crate::{
     commands::Deploy,
     config::{AuthenticationConfig, AuthenticationConfigError, ProjectConfig},
     process::{
-        ensure_cargo_contract_exists, remote_build, CargoContractInstallError,
-        FinishedBuildSession, RemoteBuildError,
+        ensure_cargo_contract_exists, instantiate_contract, remote_build,
+        CargoContractInstallError, FinishedBuildSession, Instantiation, InstantiationError,
+        RemoteBuildError,
     },
 };
-
-/// Default value passed to weight configuration flags of the `cargo-contract`.
-const DEFAULT_WEIGHT_VAL: u64 = 10_000_000_000;
 
 /// `deploy` subcommand errors.
 #[derive(Debug, Display, From, Error)]
@@ -37,24 +34,26 @@ pub(crate) enum DeployError {
     /// Unable to install `cargo-contract`.
     CargoContractInstallError(CargoContractInstallError),
 
-    /// Contract could not be instantiated from the downloaded WASM blob.
-    #[display(fmt = "unable to instantiate a contract")]
-    InstantiationError,
-
     /// Remote build process error.
     RemoteBuildError(RemoteBuildError),
+
+    /// Contract could not be instantiated from the downloaded WASM blob.
+    #[display(fmt = "unable to instantiate a contract")]
+    InstantiationError(InstantiationError),
 }
 
 /// Deployment flow entrypoint.
-pub(crate) fn deploy(
+pub(crate) async fn deploy(
     Deploy {
         constructor,
         force_new_build_sessions,
+        root,
         url,
         suri,
         args,
         gas,
         proof_size,
+        salt,
         cargo_contract_flags,
     }: Deploy,
 ) -> Result<(), DeployError> {
@@ -65,7 +64,7 @@ pub(crate) fn deploy(
 
     let cargo = which::which("cargo")?;
 
-    ensure_cargo_contract_exists(&cargo, &project_config.cargo_contract_version, &progress)?;
+    ensure_cargo_contract_exists(&cargo, &project_config.cargo_contract_version, &progress).await?;
 
     let FinishedBuildSession {
         wasm_file,
@@ -76,7 +75,9 @@ pub(crate) fn deploy(
         &project_config,
         &progress,
         force_new_build_sessions,
-    )?;
+        root.as_deref(),
+    )
+    .await?;
 
     progress.set_message("Deploying...");
 
@@ -103,45 +104,28 @@ pub(crate) fn deploy(
         upload_command.args(["--suri", suri]);
     }
 
-    upload_command.spawn()?.wait()?;
+    upload_command.spawn()?.wait().await?;
 
     // Don't check for upload errors, since we might already have
     // the same code hash uploaded. Proceed with instantiation instead.
-    let mut instantiate_command = Command::new(cargo);
 
-    instantiate_command
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .args([
-            "contract",
-            "instantiate",
-            "--execute",
-            "--skip-confirm",
-            "--skip-dry-run",
-            "--gas",
-            &gas.unwrap_or(DEFAULT_WEIGHT_VAL).to_string(),
-            "--proof-size",
-            &proof_size.unwrap_or(DEFAULT_WEIGHT_VAL).to_string(),
-        ])
-        .arg(metadata_file.path())
-        .args(["--constructor", &constructor])
-        .args(cargo_contract_flags);
+    let instantiation_config = Instantiation {
+        constructor: &constructor,
+        args: args.as_deref(),
+        suri: suri.as_deref(),
+        url: url.as_deref(),
+        gas,
+        proof_size,
+    };
 
-    if let Some(url) = url.as_deref() {
-        instantiate_command.args(["--url", url]);
-    }
-
-    if let Some(suri) = suri.as_deref() {
-        instantiate_command.args(["--suri", suri]);
-    }
-
-    if let Some(args) = args {
-        instantiate_command.args(["--args", &args]);
-    }
-
-    if !instantiate_command.spawn()?.wait()?.success() {
-        return Err(DeployError::InstantiationError);
-    }
+    instantiate_contract(
+        &cargo,
+        &instantiation_config,
+        &cargo_contract_flags,
+        Some(metadata_file.path()),
+        salt.unwrap_or_else(|| thread_rng().gen()),
+    )
+    .await?;
 
     progress.finish_with_message(format!(
         "Contract uploaded: {}/codeHash/{}",

@@ -6,7 +6,7 @@ use rand::{
     distributions::{Alphanumeric, DistString},
     thread_rng,
 };
-use reqwest::StatusCode;
+use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -44,7 +44,7 @@ pub(crate) enum AuthError {
 }
 
 /// Authentication flow entrypoint.
-pub(crate) fn auth(
+pub(crate) async fn auth(
     Auth {
         server_path,
         web_path,
@@ -67,18 +67,19 @@ pub(crate) fn auth(
     loop {
         pg.set_message("Awaiting for authentication token...");
 
-        let build_session_status = reqwest::blocking::Client::new()
+        let build_session_status = Client::new()
             .post(format!("{server_domain}/auth/exchange"))
             .json(&ExchangeRequest {
                 cli_token: &cli_token,
             })
-            .send()?
+            .send()
+            .await?
             .error_for_status();
 
         match build_session_status {
             Ok(response) => {
                 AuthenticationConfig::write_token(
-                    response.json::<ExchangeResponse>()?.token,
+                    response.json::<ExchangeResponse>().await?.token,
                     server_domain,
                     web_domain,
                 )?;

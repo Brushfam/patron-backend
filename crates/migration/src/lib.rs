@@ -15,6 +15,7 @@ mod m20220101_000012_create_cli_tokens_table;
 mod m20220101_000013_create_events_table;
 mod m20220101_000014_remove_node_schema;
 mod m20220101_000015_remove_rust_version;
+mod m20220101_000016_add_project_directory;
 
 pub(crate) use m20220101_000001_create_users_table::Users;
 pub(crate) use m20220101_000003_create_authentication_tokens_table::AuthenticationTokens;
@@ -43,6 +44,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20220101_000013_create_events_table::Migration),
             Box::new(m20220101_000014_remove_node_schema::Migration),
             Box::new(m20220101_000015_remove_rust_version::Migration),
+            Box::new(m20220101_000016_add_project_directory::Migration),
         ]
     }
 }

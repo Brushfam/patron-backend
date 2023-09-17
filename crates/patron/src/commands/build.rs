@@ -54,9 +54,10 @@ pub(crate) enum BuildError {
 }
 
 /// Build flow entrypoint.
-pub(crate) fn build(
+pub(crate) async fn build(
     Build {
         force_new_build_sessions,
+        root,
         wasm_path,
         metadata_path,
         bundle_path,
@@ -77,7 +78,9 @@ pub(crate) fn build(
         &project_config,
         &progress,
         force_new_build_sessions,
-    )?;
+        root.as_deref(),
+    )
+    .await?;
 
     if wasm_path.is_none() || metadata_path.is_none() || bundle_path.is_none() {
         fs::create_dir_all(TARGET_DIR)?;

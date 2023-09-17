@@ -1,7 +1,6 @@
 use std::{
     fs::File,
     io::{self, Read},
-    process::{Command, Stdio},
 };
 
 use common::hash::blake2;
@@ -12,8 +11,8 @@ use crate::{
     commands::Verify,
     config::{AuthenticationConfig, AuthenticationConfigError, ProjectConfig},
     process::{
-        ensure_cargo_contract_exists, remote_build, CargoContractInstallError,
-        FinishedBuildSession, RemoteBuildError,
+        build_locally, ensure_cargo_contract_exists, ensure_docker_exists, remote_build,
+        BuildError, CargoContractInstallError, FinishedBuildSession, RemoteBuildError,
     },
 };
 
@@ -29,28 +28,29 @@ pub(crate) enum VerifyError {
     /// IO-related error.
     Io(io::Error),
 
-    /// JSON parsing error.
-    Json(serde_json::Error),
+    /// Local build process error.
+    LocalBuildProcessError(BuildError),
 
     /// Remote build process error.
-    BuildProcessError(RemoteBuildError),
+    RemoteBuildProcessError(RemoteBuildError),
 
     /// [`which`] crate was unable to determine location of the `cargo` binary file.
     #[display(fmt = "unable to locate cargo: {}", _0)]
     Which(which::Error),
 
+    /// Docker installation was not found.
+    #[display(fmt = "unable to find docker installation")]
+    DockerInstallationMissing,
+
     /// Unable to install `cargo-contract`.
     CargoContractInstallError(CargoContractInstallError),
-
-    /// Unable to get WASM path from cargo-contract output.
-    #[display(fmt = "unable to get WASM path from cargo-contract output")]
-    InvalidOutputJson,
 }
 
 /// Verify flow entrypoint.
-pub(crate) fn verify(
+pub(crate) async fn verify(
     Verify {
         force_new_build_sessions,
+        root,
     }: Verify,
 ) -> Result<(), VerifyError> {
     let auth_config = AuthenticationConfig::new()?;
@@ -60,38 +60,30 @@ pub(crate) fn verify(
 
     let cargo = which::which("cargo")?;
 
-    ensure_cargo_contract_exists(&cargo, &project_config.cargo_contract_version, &progress)?;
+    ensure_cargo_contract_exists(&cargo, &project_config.cargo_contract_version, &progress).await?;
+
+    if ensure_docker_exists().await {
+        return Err(VerifyError::DockerInstallationMissing);
+    }
 
     let FinishedBuildSession { code_hash, .. } = remote_build(
         &auth_config,
         &project_config,
         &progress,
         force_new_build_sessions,
-    )?;
+        root.as_deref(),
+    )
+    .await?;
 
     println!("Remote code hash: 0x{code_hash}");
 
     progress.finish_with_message("Remote build finished. Proceeding with the local build...");
 
-    let local_command = Command::new(&cargo)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::inherit())
-        .args(["contract", "build", "--verifiable", "--output-json"])
-        .spawn()?
-        .wait_with_output()?;
-
-    let output: serde_json::Value = serde_json::from_slice(&local_command.stdout)?;
+    let build_result = build_locally(&cargo, true).await?;
 
     let mut wasm_buf = Vec::new();
 
-    File::open(
-        output
-            .get("dest_wasm")
-            .ok_or(VerifyError::InvalidOutputJson)?
-            .as_str()
-            .ok_or(VerifyError::InvalidOutputJson)?,
-    )?
-    .read_to_end(&mut wasm_buf)?;
+    File::open(build_result.dest_wasm)?.read_to_end(&mut wasm_buf)?;
 
     let local_code_hash = hex::encode(blake2(&wasm_buf));
 

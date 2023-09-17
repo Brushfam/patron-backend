@@ -130,18 +130,12 @@ You can also use a standard Rust toolchain for this task:
 cargo build --release
 ```
 
-## Smart contract builder image
+## Smart contract builder images
 
-To build the Docker image itself, you can utilize the next command:
-
-```sh
-nix build .#docker.ink-builder
-```
-
-Load the resulting image with this command:
+Load the required images with this command:
 
 ```sh
-docker load < result
+nix run .#loadDockerImages
 ```
 
 ## Database migration manager

@@ -45,6 +45,13 @@ pub(super) struct BuildSessionCreateRequest {
     #[validate(length(max = 32), custom = "validate_cargo_contract_version")]
     #[schemars(example = "crate::schema::example_cargo_contract_version")]
     cargo_contract_version: String,
+
+    /// Relative project directory, that can be used to build multi-contract projects.
+    ///
+    /// If empty, the source code root will be used.
+    #[validate(length(max = 64), custom = "validate_project_directory")]
+    #[schemars(example = "crate::schema::example_folder")]
+    project_directory: Option<String>,
 }
 
 /// Validate the provided cargo-contract version to be a valid Semver string.
@@ -52,6 +59,19 @@ fn validate_cargo_contract_version(cargo_contract_version: &str) -> Result<(), V
     Version::parse(cargo_contract_version)
         .map(|_| ())
         .map_err(|_| ValidationError::new("invalid cargo-contract version"))
+}
+
+/// Validate the provided project directory to be an alphanumeric-based path.
+fn validate_project_directory(project_directory: &str) -> Result<(), ValidationError> {
+    if project_directory.chars().all(|ch| {
+        matches!(ch, '.' | '/' | '_' | '-')
+            || ch.is_ascii_alphanumeric()
+            || ch.is_ascii_whitespace()
+    }) {
+        Ok(())
+    } else {
+        Err(ValidationError::new("expected alphanumeric-based path"))
+    }
 }
 
 /// JSON response body.
@@ -99,6 +119,7 @@ pub(super) async fn create(
                     user_id: ActiveValue::Set(Some(current_user.id())),
                     source_code_id: ActiveValue::Set(request.source_code_id),
                     cargo_contract_version: ActiveValue::Set(request.cargo_contract_version),
+                    project_directory: ActiveValue::Set(request.project_directory),
                     ..Default::default()
                 })
                 .exec_with_returning(txn)
@@ -136,7 +157,7 @@ mod tests {
     use common::config::Config;
     use db::{public_key, source_code, token, user, ActiveValue, DatabaseConnection, EntityTrait};
     use serde_json::json;
-    use tower::ServiceExt;
+    use tower::{Service, ServiceExt};
 
     async fn create_test_env(db: &DatabaseConnection) -> (String, i64) {
         let user = user::Entity::insert(user::ActiveModel::default())
@@ -189,6 +210,7 @@ mod tests {
                     .body(Body::from_json(json!({
                         "source_code_id": source_code_id,
                         "cargo_contract_version": "3.0.0",
+                        "project_directory": "./contracts/test/../another_contract"
                     })))
                     .unwrap(),
             )
@@ -248,5 +270,52 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn invalid_project_directory() {
+        let db = create_database().await;
+
+        let (token, _) = create_test_env(&db).await;
+
+        let mut service = crate::app_router(Arc::new(db), Arc::new(Config::for_tests()));
+
+        let response = service
+            .call(
+                Request::builder()
+                    .method("POST")
+                    .uri("/buildSessions")
+                    .header("Authorization", format!("Bearer {token}"))
+                    .header("Content-Type", "application/json")
+                    .body(Body::from_json(json!({
+                        "source_code_id": 123,
+                        "cargo_contract_version": "3.0.0",
+                        "project_directory": "��",
+                    })))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+
+        let response = service
+            .call(
+                Request::builder()
+                    .method("POST")
+                    .uri("/buildSessions")
+                    .header("Authorization", format!("Bearer {token}"))
+                    .header("Content-Type", "application/json")
+                    .body(Body::from_json(json!({
+                        "source_code_id": 123,
+                        "cargo_contract_version": "3.0.0",
+                        "project_directory": "\\",
+                    })))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
     }
 }

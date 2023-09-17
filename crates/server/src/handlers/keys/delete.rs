@@ -72,8 +72,10 @@ mod tests {
         body::Body,
         http::{Request, StatusCode},
     };
-    use common::config::Config;
-    use common::rpc::sp_core::crypto::{AccountId32, Ss58Codec};
+    use common::{
+        config::Config,
+        rpc::sp_core::crypto::{AccountId32, Ss58Codec},
+    };
     use db::{public_key, token, user, ActiveValue, DatabaseConnection, EntityTrait};
     use serde_json::json;
     use tower::Service;

@@ -37,18 +37,18 @@ in {
 
     ${unzip} $dst
 
-    shopt -s globstar
-    for i in **/*.rs; do
-      ${curl} -f "$API_SERVER_URL"/files/upload/"$BUILD_SESSION_TOKEN" \
-        -F "$i"="@$i"
-    done
+    # shopt -s globstar
+    # for i in **/*.rs; do
+    #   ${curl} -f "$API_SERVER_URL"/files/upload/"$BUILD_SESSION_TOKEN" \
+    #     -F "$i"="@$i"
+    # done
 
-    ${curl} -f "$API_SERVER_URL"/files/seal/"$BUILD_SESSION_TOKEN" \
-      -X POST
+    # ${curl} -f "$API_SERVER_URL"/files/seal/"$BUILD_SESSION_TOKEN" \
+    #   -X POST
   '');
 
   move = mkStageImage "move" ''
-    mv /contract/target/ink/*.wasm /contract/target/ink/main.wasm
-    mv /contract/target/ink/*.json /contract/target/ink/main.json
+    mv target/ink/*.wasm target/ink/main.wasm
+    mv target/ink/*.json target/ink/main.json
   '';
 }

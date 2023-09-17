@@ -26,14 +26,16 @@ mod config;
 mod process;
 
 /// CLI entrypoint.
-fn main() -> Result<(), anyhow::Error> {
+#[tokio::main(flavor = "current_thread")]
+async fn main() -> Result<(), anyhow::Error> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Auth(args) => commands::auth(args)?,
-        Commands::Deploy(args) => commands::deploy(args)?,
-        Commands::Build(args) => commands::build(args)?,
-        Commands::Verify(args) => commands::verify(args)?,
+        Commands::Auth(args) => commands::auth(args).await?,
+        Commands::Deploy(args) => commands::deploy(args).await?,
+        Commands::Build(args) => commands::build(args).await?,
+        Commands::Verify(args) => commands::verify(args).await?,
+        Commands::Watch(args) => commands::watch(args).await?,
     }
 
     Ok(())
