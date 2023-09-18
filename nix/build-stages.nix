@@ -37,18 +37,24 @@ in {
 
     ${unzip} $dst
 
-    # shopt -s globstar
-    # for i in **/*.rs; do
-    #   ${curl} -f "$API_SERVER_URL"/files/upload/"$BUILD_SESSION_TOKEN" \
-    #     -F "$i"="@$i"
-    # done
+    shopt -s globstar
+    for i in **/*.rs; do
+      ${curl} -f "$API_SERVER_URL"/files/upload/"$BUILD_SESSION_TOKEN" \
+        -F "$i"="@$i"
+    done
 
-    # ${curl} -f "$API_SERVER_URL"/files/seal/"$BUILD_SESSION_TOKEN" \
-    #   -X POST
+    ${curl} -f "$API_SERVER_URL"/files/seal/"$BUILD_SESSION_TOKEN" \
+      -X POST
   '');
 
-  move = mkStageImage "move" ''
-    mv target/ink/*.wasm target/ink/main.wasm
-    mv target/ink/*.json target/ink/main.json
-  '';
+  move = mkStageImage "move" (let
+    mkMove = extension: ''
+      find /contract/target/ink \
+        -maxdepth 2 \
+        -type f \
+        -name "*.${extension}" \
+        -exec mv {} /contract/target/ink/main.${extension} \;
+    '';
+  in
+    pkgs.lib.concatStringsSep "\n" (map mkMove ["wasm" "json"]));
 }

@@ -450,13 +450,9 @@ impl<'a> BuiltInstance<'a> {
 
         let outcome = wait(&container, self.docker, self.builder_config)
             .and_then(|_| async {
-                let wasm = container
-                    .wasm_file(self.docker, &self.normalized_path, wasm_buf)
-                    .await?;
+                let wasm = container.wasm_file(self.docker, wasm_buf).await?;
 
-                let metadata = container
-                    .metadata_file(self.docker, &self.normalized_path, metadata_buf)
-                    .await?;
+                let metadata = container.metadata_file(self.docker, metadata_buf).await?;
 
                 debug!(
                     wasm_size = %wasm.len(),

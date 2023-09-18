@@ -141,8 +141,6 @@ impl Container {
             None
         };
 
-        dbg!(working_dir);
-
         let container = match client
             .create_container(
                 Some(CreateContainerOptions {
@@ -203,15 +201,10 @@ impl Container {
     pub async fn wasm_file<'a>(
         &self,
         client: &Docker,
-        working_dir: &str,
         buf: &'a mut [u8],
     ) -> Result<&'a [u8], DownloadFromContainerError> {
-        self.download_from_container_to_buf(
-            client,
-            &format!("{}/target/ink/main.wasm", working_dir),
-            buf,
-        )
-        .await
+        self.download_from_container_to_buf(client, "/contract/target/ink/main.wasm", buf)
+            .await
     }
 
     /// Get JSON metadata of an ink! smart contract from the container's filesystem.
@@ -220,15 +213,10 @@ impl Container {
     pub async fn metadata_file<'a>(
         &self,
         client: &Docker,
-        working_dir: &str,
         buf: &'a mut [u8],
     ) -> Result<&'a [u8], DownloadFromContainerError> {
-        self.download_from_container_to_buf(
-            client,
-            &format!("{}/target/ink/main.json", working_dir),
-            buf,
-        )
-        .await
+        self.download_from_container_to_buf(client, "/contract/target/ink/main.json", buf)
+            .await
     }
 
     /// Get a [`Stream`] of the current Docker container process events.
