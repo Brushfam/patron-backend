@@ -58,6 +58,12 @@ You can also pass arbitrary flags to `cargo-contract` using `--` syntax:
 patron deploy new --suri //Alice -- --password 123
 ```
 
+To deploy a project where multi-contracts are stored within one workspace use `--root` flag:
+
+```sh
+patron deploy new --suri //Alice --root accumulator
+```
+
 To get more information, invoke the deploy command with the `--help` flag.
 
 ## Build
@@ -67,6 +73,12 @@ by using the `build` subcommand which, by default, outputs `contract.wasm` and `
 to the `./target/ink` directory.
 
 You can modify the output directory with `--wasm_path` and `--metadata_path` flags.
+
+Build command also supports building multi-contract projects using the `--root` flag:
+
+```sh
+patron build --root accumulator
+```
 
 See `--help` flag output for more information.
 
@@ -86,3 +98,15 @@ You can use almost any flag available in the [`deploy` subcommand](#deploy).
 File watcher will automatically deploy your contract using the provided configuration, so ensure that
 constructor ABI is the same between each re-build.
 
+## Local build with remote verification
+
+You can also utilize `cargo-contract`'s support of verifiable builds to
+locally build your contract, deploy it on chain and verify it only after the deployment
+process.
+
+1. Run `cargo contract build --verifiable`, wait for the build to finish.
+2. Deploy your contract on chain.
+3. Run `patron build` to verify your source code remotely.
+
+By using CLI in that manner, you can ensure that the code on chain was
+produced locally, while still verifying it with Patron.
