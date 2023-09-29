@@ -4,6 +4,9 @@ mod create;
 /// Build session details route.
 mod details;
 
+/// Build session diagnostics route.
+mod diagnostics;
+
 /// Latest build session info route.
 mod latest;
 
@@ -52,7 +55,11 @@ pub(crate) fn routes(
             get_with(details::details, details::docs),
         )
         .api_route("/status/:id", get_with(status::status, status::docs))
-        .api_route("/logs/:id", get_with(logs::logs, logs::docs));
+        .api_route("/logs/:id", get_with(logs::logs, logs::docs))
+        .api_route(
+            "/diagnostics/:id",
+            get_with(diagnostics::diagnostics, diagnostics::docs),
+        );
 
     let private_routes = ApiRouter::new()
         .api_route(

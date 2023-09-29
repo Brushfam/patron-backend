@@ -11,6 +11,7 @@ pub mod build_session_token;
 pub mod cli_token;
 pub mod code;
 pub mod contract;
+pub mod diagnostic;
 pub mod event;
 pub mod file;
 pub mod log;
