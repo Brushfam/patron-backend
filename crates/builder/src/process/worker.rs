@@ -4,16 +4,17 @@ use bollard::Docker;
 use common::{config, hash, s3};
 use db::{
     build_session::{self, ProcessedBuildSession},
-    build_session_token, code,
+    build_session_token, code, diagnostic, file,
     sea_query::{LockBehavior, LockType, OnConflict},
     source_code, ActiveValue, ColumnTrait, DatabaseConnection, DatabaseTransaction, DbErr,
     EntityTrait, QueryFilter, QuerySelect, TransactionErrorExt, TransactionTrait,
 };
 use derive_more::{Display, Error, From};
 use futures_util::{pin_mut, StreamExt, TryFutureExt};
+use ink_analyzer::Severity;
 use itertools::Itertools;
 use normalize_path::NormalizePath;
-use tokio::{sync::mpsc::UnboundedSender, time::timeout};
+use tokio::{sync::mpsc::UnboundedSender, task::JoinError, time::timeout};
 use tracing::{debug, error, instrument};
 
 use crate::{
@@ -201,6 +202,10 @@ enum SessionError {
     #[display(fmt = "container timed out")]
     TimedOut,
 
+    /// Unable to spawn ink-analyzer task.
+    #[display(fmt = "unable to spawn ink-analyzer task")]
+    InkAnalyzerSpawn(JoinError),
+
     /// Unsupported cargo-contract version.
     #[display(fmt = "unsupported cargo-contract version")]
     UnsupportedCargoContractVersion,
@@ -264,6 +269,41 @@ impl<'a> Instance<'a> {
             .await
             .get_source_code(&archive_hash)
             .await?;
+
+        debug!("running ink-analyzer on lib.rs file");
+
+        let lib_rs = file::Entity::find()
+            .select_only()
+            .columns([file::Column::Id, file::Column::Text])
+            .filter(file::Column::SourceCodeId.eq(self.build_session.source_code_id))
+            .filter(file::Column::Name.eq("lib.rs"))
+            .into_tuple::<(i64, String)>()
+            .one(self.txn)
+            .await?;
+
+        if let Some((file_id, text)) = lib_rs {
+            let diagnostics = tokio::task::spawn_blocking(move || {
+                ink_analyzer::Analysis::new(&text).diagnostics()
+            })
+            .await?;
+
+            diagnostic::Entity::insert_many(diagnostics.into_iter().map(|raw_diagnostic| {
+                diagnostic::ActiveModel {
+                    build_session_id: ActiveValue::Set(self.build_session.id),
+                    file_id: ActiveValue::Set(file_id),
+                    level: ActiveValue::Set(match raw_diagnostic.severity {
+                        Severity::Warning => diagnostic::Level::Warning,
+                        Severity::Error => diagnostic::Level::Error,
+                    }),
+                    start: ActiveValue::Set(u32::from(raw_diagnostic.range.start()) as i64),
+                    end: ActiveValue::Set(u32::from(raw_diagnostic.range.end()) as i64),
+                    message: ActiveValue::Set(raw_diagnostic.message),
+                    ..Default::default()
+                }
+            }))
+            .exec_without_returning(self.txn)
+            .await?;
+        }
 
         debug!("creating new volume for build session");
 

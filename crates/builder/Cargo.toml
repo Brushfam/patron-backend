@@ -10,6 +10,7 @@ bollard = "0.14.0"
 clap = { version = "4.2.7", features = ["derive"] }
 derive_more = { version = "0.99.17", default-features = false, features = ["display", "error", "from"] }
 futures-util = "0.3.28"
+ink-analyzer = "0.8.6"
 itertools = "0.10.5"
 normalize-path = "0.2.1"
 strip-ansi-escapes = "0.2.0"

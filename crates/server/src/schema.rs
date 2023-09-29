@@ -6,7 +6,7 @@ use common::rpc::sp_core::{
     sr25519::{Pair, Public, Signature},
     Pair as _,
 };
-use db::{build_session, event::EventBody};
+use db::{build_session, diagnostic, event::EventBody};
 use serde_json::{json, Value};
 
 use crate::hex_hash::HexHash;
@@ -60,5 +60,9 @@ generate_examples!(
         String::from("Cargo.lock"),
     ];
     folder, Option<String>, Some(String::from("contracts/test_contract"));
-    node, String, String::from("alephzero")
+    node, String, String::from("alephzero");
+    diagnostic_level, diagnostic::Level, diagnostic::Level::Error;
+    diagnostic_start, i64, 0;
+    diagnostic_end, i64, 1;
+    diagnostic_message, String, String::from("test")
 );
