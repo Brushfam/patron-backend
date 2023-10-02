@@ -53,6 +53,7 @@ in {
         -maxdepth 2 \
         -type f \
         -name "*.${extension}" \
+        -not -path "*/.*" \
         -exec mv {} /contract/target/ink/main.${extension} \;
     '';
   in
