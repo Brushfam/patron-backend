@@ -41,6 +41,11 @@ pub(super) enum BuildSessionDetailsError {
     #[status(StatusCode::NOT_FOUND)]
     #[display(fmt = "build session not found")]
     BuildSessionNotFound,
+
+    /// Provided identifier could not be parsed as a code hash or as a numeric identifier.
+    #[status(StatusCode::BAD_REQUEST)]
+    #[display(fmt = "unknown identifier format, use either code hash or numeric id")]
+    UnknownIdFormat,
 }
 
 /// Generate OAPI documentation for the [`details`] handler.
@@ -60,7 +65,7 @@ pub(super) fn docs(op: TransformOperation) -> TransformOperation {
 /// This route is suitable to acquire the information on tooling
 /// versions used during the smart contract build process.
 pub(super) async fn details(
-    Path(code_hash): Path<HexHash>,
+    Path(id): Path<String>,
     State(db): State<Arc<DatabaseConnection>>,
 ) -> Result<Json<BuildSessionInfo>, BuildSessionDetailsError> {
     let model = build_session::Entity::find()
@@ -69,7 +74,16 @@ pub(super) async fn details(
             build_session::Column::SourceCodeId,
             build_session::Column::CargoContractVersion,
         ])
-        .filter(build_session::Column::CodeHash.eq(&code_hash.0[..]))
+        .filter(match serde_plain::from_str::<HexHash>(&id) {
+            Ok(val) => build_session::Column::CodeHash.eq(&val.0[..]),
+            Err(_) => {
+                let id = id
+                    .parse::<i64>()
+                    .map_err(|_| BuildSessionDetailsError::UnknownIdFormat)?;
+
+                build_session::Column::Id.eq(id)
+            }
+        })
         .order_by_desc(build_session::Column::CreatedAt)
         .into_model()
         .one(&*db)
@@ -94,7 +108,7 @@ mod tests {
     use db::{build_session, source_code, user, ActiveValue, DatabaseConnection, EntityTrait};
     use tower::ServiceExt;
 
-    async fn create_test_env(db: &DatabaseConnection) {
+    async fn create_test_env(db: &DatabaseConnection) -> i64 {
         let user = user::Entity::insert(user::ActiveModel::default())
             .exec_with_returning(db)
             .await
@@ -110,7 +124,7 @@ mod tests {
         .expect("unable to create source code")
         .id;
 
-        build_session::Entity::insert(build_session::ActiveModel {
+        let build_session_id = build_session::Entity::insert(build_session::ActiveModel {
             user_id: ActiveValue::Set(Some(user.id)),
             source_code_id: ActiveValue::Set(source_code_id),
             status: ActiveValue::Set(build_session::Status::New),
@@ -118,13 +132,39 @@ mod tests {
             code_hash: ActiveValue::Set(Some(vec![0; 32])),
             ..Default::default()
         })
-        .exec_without_returning(db)
+        .exec_with_returning(db)
         .await
-        .expect("unable to insert build session");
+        .expect("unable to insert build session")
+        .id;
+
+        build_session_id
     }
 
     #[tokio::test]
-    async fn successful() {
+    async fn successful_with_build_session_id() {
+        let db = create_database().await;
+
+        let build_session_id = create_test_env(&db).await;
+
+        let response = crate::app_router(Arc::new(db), Arc::new(Config::for_tests()))
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri(format!("/buildSessions/details/{}", build_session_id))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_json!(response.json().await, {
+            "source_code_id": 1,
+            "cargo_contract_version": "3.0.0"
+        });
+    }
+
+    #[tokio::test]
+    async fn successful_with_code_hash() {
         let db = create_database().await;
 
         create_test_env(&db).await;

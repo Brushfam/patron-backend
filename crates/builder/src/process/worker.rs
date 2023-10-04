@@ -287,22 +287,24 @@ impl<'a> Instance<'a> {
             })
             .await?;
 
-            diagnostic::Entity::insert_many(diagnostics.into_iter().map(|raw_diagnostic| {
-                diagnostic::ActiveModel {
-                    build_session_id: ActiveValue::Set(self.build_session.id),
-                    file_id: ActiveValue::Set(file_id),
-                    level: ActiveValue::Set(match raw_diagnostic.severity {
-                        Severity::Warning => diagnostic::Level::Warning,
-                        Severity::Error => diagnostic::Level::Error,
-                    }),
-                    start: ActiveValue::Set(u32::from(raw_diagnostic.range.start()) as i64),
-                    end: ActiveValue::Set(u32::from(raw_diagnostic.range.end()) as i64),
-                    message: ActiveValue::Set(raw_diagnostic.message),
-                    ..Default::default()
-                }
-            }))
-            .exec_without_returning(self.txn)
-            .await?;
+            if !diagnostics.is_empty() {
+                diagnostic::Entity::insert_many(diagnostics.into_iter().map(|raw_diagnostic| {
+                    diagnostic::ActiveModel {
+                        build_session_id: ActiveValue::Set(self.build_session.id),
+                        file_id: ActiveValue::Set(file_id),
+                        level: ActiveValue::Set(match raw_diagnostic.severity {
+                            Severity::Warning => diagnostic::Level::Warning,
+                            Severity::Error => diagnostic::Level::Error,
+                        }),
+                        start: ActiveValue::Set(u32::from(raw_diagnostic.range.start()) as i64),
+                        end: ActiveValue::Set(u32::from(raw_diagnostic.range.end()) as i64),
+                        message: ActiveValue::Set(raw_diagnostic.message),
+                        ..Default::default()
+                    }
+                }))
+                .exec_without_returning(self.txn)
+                .await?;
+            }
         }
 
         debug!("creating new volume for build session");
