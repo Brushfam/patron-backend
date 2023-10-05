@@ -35,7 +35,7 @@ pub(super) enum BuildSessionDiagnosticError {
 /// JSON response body.
 #[derive(Serialize, JsonSchema)]
 pub(super) struct BuildSessionDiagnosticResponse {
-    /// Diagnostic level(Error, Warning)
+    /// Diagnostic severity level.
     #[schemars(example = "crate::schema::example_diagnostic_level")]
     level: diagnostic::Level,
 
@@ -54,8 +54,11 @@ pub(super) struct BuildSessionDiagnosticResponse {
 
 /// Generate OAPI documentation for the [`diagnostics`] handler.
 pub(super) fn docs(op: TransformOperation) -> TransformOperation {
-    op.summary("Get all diagnostics for file.")
-        .response::<200, Json<Vec<BuildSessionDiagnosticResponse>>>()
+    op.summary("Get diagnostics related to the provided build session.")
+        .description(r#""#)
+        .response_with::<200, Json<Vec<BuildSessionDiagnosticResponse>>, _>(|op| {
+            op.description("JSON diagnostics response.")
+        })
         .response_with::<404, Json<Value>, _>(|op| {
             op.description("No build sessions with the provided identifier were found.")
                 .example(example_error(
