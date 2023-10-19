@@ -20,7 +20,7 @@ default-features = false
 features = [
     "macros",
     "sqlx-postgres",
-    "runtime-tokio-native-tls",
+    "runtime-tokio-rustls",
     "with-time"
 ]
 
